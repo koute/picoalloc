@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = [
+    ".",
+    "native"
+]
+
+[package]
+name = "picoalloc"
+version = "1.0.0"
+edition = "2021"
+authors = ["Jan Bujak <jan@parity.io>"]
+repository = "https://github.com/koute/picoalloc"
+homepage = "https://github.com/koute/picoalloc"
+documentation = "https://docs.rs/picoalloc/*/picoalloc/"
+license = "MIT/Apache-2.0"
+readme = "README.md"
+keywords = ["allocator"]
+categories = ["memory-management"]
+description = "Simple, small and fast memory allocator"
+
+[profile.release]
+lto = "fat"
+panic = "abort"
+debug = "full"
+opt-level = "s"
+
+[profile.dev]
+panic = "abort"
+
+[features]
+default = []
+global_allocator_libc = []
+global_allocator_rust = []
+paranoid = ["strict_provenance"]
+strict_provenance = []

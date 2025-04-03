@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = ["."]
+
+[package]
+name = "picoalloc-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+arbitrary = { version = "1", features = ["derive"] }
+libfuzzer-sys = "0.4"
+oorandom = "11.1.5"
+picoalloc = { path = "..", features = ["paranoid"] }
+
+[[bin]]
+name = "allocator"
+path = "fuzz_targets/allocator.rs"
+test = false
+doc = false
+bench = false
+
+[profile.release]
+panic = "abort"
+
+[profile.dev]
+panic = "abort"

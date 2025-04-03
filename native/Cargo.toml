@@ -1,0 +1,16 @@
+[package]
+name = "picoalloc_native"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "picoalloc_native"
+path = "src/lib.rs"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+picoalloc = { path = "..", features = ["global_allocator_libc"] }
+
+[features]
+paranoid = ["picoalloc/paranoid"]

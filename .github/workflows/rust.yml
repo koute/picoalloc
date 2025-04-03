@@ -1,0 +1,38 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test-linux:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: uname -a
+      run: uname -a
+    - name: Build and test
+      run: ./ci/jobs/build-and-test.sh
+  rustfmt:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install rustfmt
+      run: rustup component add rustfmt
+    - name: Run rustfmt
+      run: ./ci/jobs/rustfmt.sh
+  fuzz:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install toolchain
+      run: rustup toolchain install nightly-2025-03-29
+    - name: Install cargo fuzz
+      run: rustup run nightly-2025-03-29 cargo install --locked --version 0.12.0 cargo-fuzz
+    - name: Fuzz
+      run: ./ci/jobs/fuzz.sh
