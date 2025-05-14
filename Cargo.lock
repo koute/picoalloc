@@ -5,6 +5,9 @@ version = 4
 [[package]]
 name = "picoalloc"
 version = "1.0.0"
+dependencies = [
+ "polkavm-derive",
+]
 
 [[package]]
 name = "picoalloc_native"
@@ -12,3 +15,75 @@ version = "0.1.0"
 dependencies = [
  "picoalloc",
 ]
+
+[[package]]
+name = "polkavm-common"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d91ed9e5af472f729fcf3b3c1cf17508ddbb3505259dd6e2ee0fb5a29e105d22"
+
+[[package]]
+name = "polkavm-derive"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "176144f8661117ea95fa7cf868c9a62d6b143e8a2ebcb7582464c3faade8669a"
+dependencies = [
+ "polkavm-derive-impl-macro",
+]
+
+[[package]]
+name = "polkavm-derive-impl"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5a21844afdfcc10c92b9ef288ccb926211af27478d1730fcd55e4aec710179d"
+dependencies = [
+ "polkavm-common",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "polkavm-derive-impl-macro"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba0ef0f17ad81413ea1ca5b1b67553aedf5650c88269b673d3ba015c83bc2651"
+dependencies = [
+ "polkavm-derive-impl",
+ "syn",
+]
+
+[[package]]
+name = "proc-macro2"
+version = "1.0.95"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
+dependencies = [
+ "unicode-ident",
+]
+
+[[package]]
+name = "quote"
+version = "1.0.40"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1885c039570dc00dcb4ff087a89e185fd56bae234ddc7f056a945bf36467248d"
+dependencies = [
+ "proc-macro2",
+]
+
+[[package]]
+name = "syn"
+version = "2.0.101"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ce2b7fc941b3a24138a0a7cf8e858bfc6a992e7978a068a5c760deb0ed43caf"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
+
+[[package]]
+name = "unicode-ident"
+version = "1.0.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a5f39404a5da50712a4c1eecf25e90dd62b613502b7e925fd4e4d19b5c96512"

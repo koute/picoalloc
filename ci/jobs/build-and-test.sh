@@ -18,3 +18,6 @@ cargo build -p picoalloc_native --release
 
 echo ">> cargo check (PolkaVM)"
 RUSTC_BOOTSTRAP=1 cargo check --target=ci/riscv64emac-unknown-none-polkavm.json -Z build-std=core
+
+echo ">> cargo check (CoreVM)"
+RUSTC_BOOTSTRAP=1 cargo check --target=ci/riscv64emac-unknown-none-polkavm.json -Z build-std=core --features corevm
