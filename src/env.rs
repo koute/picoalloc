@@ -1,14 +1,14 @@
 #[cfg(all(target_arch = "x86_64", target_os = "linux", not(feature = "corevm")))]
-mod mmap;
+mod linux;
 
 #[cfg(all(target_arch = "x86_64", target_os = "linux", not(feature = "corevm")))]
-pub(crate) use self::mmap::*;
+pub(crate) use self::linux::*;
 
 #[cfg(all(target_env = "polkavm", not(feature = "corevm")))]
-mod sbrk;
+mod polkavm;
 
 #[cfg(all(target_env = "polkavm", not(feature = "corevm")))]
-pub(crate) use self::sbrk::*;
+pub(crate) use self::polkavm::*;
 
 #[cfg(all(target_env = "polkavm", feature = "corevm"))]
 mod corevm;
