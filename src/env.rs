@@ -1,7 +1,7 @@
-#[cfg(all(target_arch = "x86_64", target_os = "linux", not(feature = "corevm")))]
+#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 mod linux;
 
-#[cfg(all(target_arch = "x86_64", target_os = "linux", not(feature = "corevm")))]
+#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 pub(crate) use self::linux::*;
 
 #[cfg(all(target_env = "polkavm", not(feature = "corevm")))]
@@ -18,7 +18,7 @@ pub(crate) use self::corevm::*;
 
 #[cold]
 pub fn abort() -> ! {
-    #[cfg(all(target_arch = "x86_64", not(feature = "corevm")))]
+    #[cfg(target_arch = "x86_64")]
     unsafe {
         core::arch::asm!("ud2", options(noreturn, nostack));
     }
@@ -28,7 +28,7 @@ pub fn abort() -> ! {
         core::arch::asm!("unimp", options(noreturn, nostack));
     }
 
-    #[cfg(all(target_family = "wasm", not(feature = "corevm")))]
+    #[cfg(target_family = "wasm")]
     {
         core::arch::wasm32::unreachable();
     }
