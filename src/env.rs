@@ -27,6 +27,24 @@ pub trait Env {
     unsafe fn free_address_space(&mut self, base: *mut u8, size: Size);
 }
 
+#[repr(align(32))]
+pub struct Array<const SIZE: usize>(pub [u8; SIZE]);
+
+#[repr(transparent)]
+pub struct ArrayPointer<const SIZE: usize>(pub *mut Array<SIZE>);
+
+impl<const SIZE: usize> Env for ArrayPointer<SIZE> {
+    unsafe fn allocate_address_space(&mut self, _size: Size) -> *mut u8 {
+        self.0.cast()
+    }
+
+    unsafe fn expand_memory_until(&mut self, end: *mut u8) -> bool {
+        (end.addr() - self.0.addr()) <= SIZE
+    }
+
+    unsafe fn free_address_space(&mut self, _base: *mut u8, _size: Size) {}
+}
+
 pub struct System;
 
 #[cfg(all(target_arch = "x86_64", target_os = "linux"))]

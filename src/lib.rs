@@ -14,15 +14,14 @@ mod global_allocator_libc;
 mod global_allocator_rust;
 
 pub use crate::allocator::{Allocator, Size};
-pub use crate::env::{Env, System};
+pub use crate::env::{Array, ArrayPointer, Env, System};
 
 #[doc(hidden)]
 pub use crate::env::abort;
 
-#[cfg(any(all(target_arch = "x86_64", target_os = "linux"), target_env = "polkavm"))]
-#[test]
-fn test_allocator() {
-    let mut allocator = Allocator::new(System, Size::from_bytes_usize(8 * 1024 * 1024).unwrap());
+#[cfg(test)]
+fn test_allocator<E: Env>(env: E) {
+    let mut allocator = Allocator::new(env, Size::from_bytes_usize(8 * 1024 * 1024).unwrap());
     let a0 = allocator
         .alloc(Size::from_bytes_usize(1).unwrap(), Size::from_bytes_usize(1).unwrap())
         .unwrap();
@@ -34,9 +33,9 @@ fn test_allocator() {
         .unwrap();
 
     unsafe {
-        assert!(Allocator::<System>::usable_size(a0) >= 1);
-        assert_eq!(Allocator::<System>::usable_size(a1), 0);
-        assert_eq!(Allocator::<System>::usable_size(a2), 0);
+        assert!(Allocator::<E>::usable_size(a0) >= 1);
+        assert_eq!(Allocator::<E>::usable_size(a1), 0);
+        assert_eq!(Allocator::<E>::usable_size(a2), 0);
     }
 
     unsafe {
@@ -75,11 +74,22 @@ fn test_allocator() {
 
 #[cfg(any(all(target_arch = "x86_64", target_os = "linux"), target_env = "polkavm"))]
 #[test]
-fn test_many_small_allocations() {
+fn test_allocator_system() {
+    test_allocator(System);
+}
+
+#[test]
+fn test_allocator_buffer() {
+    let mut buffer = Array([0_u8; 4096]);
+    test_allocator(ArrayPointer(&mut buffer));
+}
+
+#[cfg(test)]
+fn test_many_small_allocations<E: Env>(env: E, count: usize) {
     extern crate alloc;
-    let mut allocator = Allocator::new(System, Size::from_bytes_usize(32 * 1024 * 1024).unwrap());
+    let mut allocator = Allocator::new(env, Size::from_bytes_usize(32 * 1024 * 1024).unwrap());
     let mut allocations = alloc::vec::Vec::new();
-    for _ in 0..10000 {
+    for _ in 0..count {
         allocations.push(
             allocator
                 .alloc(Size::from_bytes_usize(1).unwrap(), Size::from_bytes_usize(1).unwrap())
@@ -97,4 +107,16 @@ fn test_many_small_allocations() {
             allocator.free(allocations.swap_remove(allocations.len() / 2));
         }
     }
+}
+
+#[cfg(any(all(target_arch = "x86_64", target_os = "linux"), target_env = "polkavm"))]
+#[test]
+fn test_many_small_allocations_native() {
+    test_many_small_allocations(System, 10000);
+}
+
+#[test]
+fn test_many_small_allocations_buffer() {
+    let mut buffer = Array([0_u8; 1024 * 16]);
+    test_many_small_allocations(ArrayPointer(&mut buffer), 256);
 }
