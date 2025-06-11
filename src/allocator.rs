@@ -87,9 +87,11 @@ impl Size {
 }
 
 #[inline]
-fn align_offset(x: SizeT, a: SizeT) -> SizeT {
-    let mask = a - 1;
-    (x + mask) & !mask
+fn align_offset(x: SizeT, a: SizeT, b: usize) -> SizeT {
+    let mask = (a - 1) as usize;
+    let x = x as usize;
+    let b = b >> ALLOCATION_SIZE_SHIFT;
+    (((b + x + mask) & !mask) - b) as SizeT
 }
 
 #[cfg(any(
@@ -751,7 +753,7 @@ impl<E: Env> Allocator<E> {
         }
 
         let chunk_offset = Size::from_pointer_and_base_unchecked(chunk, Pointer::from_pointer_mut(self.base_address));
-        let data_offset = Size(align_offset(chunk_offset.0 + HEADER_SIZE.0, align.0));
+        let data_offset = Size(align_offset(chunk_offset.0 + HEADER_SIZE.0, align.0, self.base_address.addr()));
         let header_offset = data_offset.unchecked_sub(HEADER_SIZE);
         let allocation_chunk = Pointer::from_pointer_mut(self.base_address)
             .unchecked_add(header_offset)
