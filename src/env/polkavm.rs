@@ -1,4 +1,4 @@
-use crate::Size;
+use crate::{Env, Size, System};
 
 #[inline]
 fn sbrk(size: usize) -> *mut u8 {
@@ -14,27 +14,29 @@ fn sbrk(size: usize) -> *mut u8 {
     }
 }
 
-#[inline]
-pub fn allocate_address_space(_size: Size) -> *mut u8 {
-    unsafe {
-        let mut output;
-        core::arch::asm!(
-            ".insn r 0xb, 3, 0, {dst}, zero, zero",
-            dst = out(reg) output,
-        );
-        output
-    }
-}
-
-#[inline]
-pub fn expand_memory_until(end: *mut u8) -> bool {
-    let heap_end = sbrk(0);
-    if heap_end.addr() >= end.addr() {
-        return true;
+impl Env for System {
+    #[inline]
+    unsafe fn allocate_address_space(&mut self, _size: Size) -> *mut u8 {
+        unsafe {
+            let mut output;
+            core::arch::asm!(
+                ".insn r 0xb, 3, 0, {dst}, zero, zero",
+                dst = out(reg) output,
+            );
+            output
+        }
     }
 
-    !sbrk(end.addr() - heap_end.addr()).is_null()
-}
+    #[inline]
+    unsafe fn expand_memory_until(&mut self, end: *mut u8) -> bool {
+        let heap_end = sbrk(0);
+        if heap_end.addr() >= end.addr() {
+            return true;
+        }
 
-#[inline]
-pub fn free_address_space(_base: *mut u8, _size: Size) {}
+        !sbrk(end.addr() - heap_end.addr()).is_null()
+    }
+
+    #[inline]
+    unsafe fn free_address_space(&mut self, _base: *mut u8, _size: Size) {}
+}

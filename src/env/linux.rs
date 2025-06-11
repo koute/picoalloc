@@ -1,5 +1,5 @@
 use crate::env::abort;
-use crate::Size;
+use crate::{Env, Size, System};
 
 #[inline]
 fn abort_on_fail(result: usize) -> usize {
@@ -44,37 +44,39 @@ unsafe fn syscall6(nr: usize, a0: usize, a1: usize, a2: usize, a3: usize, a4: us
     r0
 }
 
-#[inline]
-pub fn allocate_address_space(size: Size) -> *mut u8 {
-    const SYS_MMAP: usize = 9;
-    const PROT_READ: usize = 1;
-    const PROT_WRITE: usize = 2;
-    const MAP_PRIVATE: usize = 2;
-    const MAP_ANONYMOUS: usize = 32;
-    unsafe {
-        let pointer = abort_on_fail(syscall6(
-            SYS_MMAP,
-            0,
-            size.bytes() as usize,
-            PROT_READ | PROT_WRITE,
-            MAP_ANONYMOUS | MAP_PRIVATE,
-            usize::MAX,
-            0,
-        ));
+impl Env for System {
+    #[inline]
+    unsafe fn allocate_address_space(&mut self, size: Size) -> *mut u8 {
+        const SYS_MMAP: usize = 9;
+        const PROT_READ: usize = 1;
+        const PROT_WRITE: usize = 2;
+        const MAP_PRIVATE: usize = 2;
+        const MAP_ANONYMOUS: usize = 32;
+        unsafe {
+            let pointer = abort_on_fail(syscall6(
+                SYS_MMAP,
+                0,
+                size.bytes() as usize,
+                PROT_READ | PROT_WRITE,
+                MAP_ANONYMOUS | MAP_PRIVATE,
+                usize::MAX,
+                0,
+            ));
 
-        core::ptr::with_exposed_provenance_mut(pointer)
+            core::ptr::with_exposed_provenance_mut(pointer)
+        }
     }
-}
 
-#[inline]
-pub fn expand_memory_until(_end: *mut u8) -> bool {
-    true
-}
+    #[inline]
+    unsafe fn expand_memory_until(&mut self, _end: *mut u8) -> bool {
+        true
+    }
 
-#[inline]
-pub fn free_address_space(base: *mut u8, size: Size) {
-    const SYS_MUNMAP: usize = 11;
-    unsafe {
-        abort_on_fail(syscall2(SYS_MUNMAP, base.expose_provenance(), size.bytes() as usize));
+    #[inline]
+    unsafe fn free_address_space(&mut self, base: *mut u8, size: Size) {
+        const SYS_MUNMAP: usize = 11;
+        unsafe {
+            abort_on_fail(syscall2(SYS_MUNMAP, base.expose_provenance(), size.bytes() as usize));
+        }
     }
 }

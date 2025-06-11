@@ -72,4 +72,4 @@ impl<T> DerefMut for MutexGuard<'_, T> {
 const MAX_TOTAL_ALLOCATED: Size = Size::from_bytes_usize(1024 * 1024 * 1024).unwrap();
 
 #[cfg_attr(feature = "global_allocator_rust", global_allocator)]
-pub(crate) static ALLOCATOR: Mutex<Allocator> = Mutex::new(Allocator::new(MAX_TOTAL_ALLOCATED));
+pub(crate) static ALLOCATOR: Mutex<Allocator<crate::System>> = Mutex::new(Allocator::new(crate::System, MAX_TOTAL_ALLOCATED));

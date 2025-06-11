@@ -1,5 +1,7 @@
 #![allow(clippy::unnecessary_cast)]
 
+use crate::Env;
+
 #[cfg(any(debug_assertions, test, feature = "paranoid"))]
 macro_rules! paranoid_assert {
     ($e:expr) => {
@@ -548,29 +550,33 @@ const _: () = {
     assert!(HEADER_SIZE.0 == 1);
 };
 
-pub struct Allocator {
+pub struct Allocator<E: Env> {
     total_space: Size,
     base_address: *mut u8,
     free_lists_with_unallocated_memory: BitMask,
     first_in_free_list: [Pointer<FreeChunkHeader>; BIN_CONFIG.bin_count as usize],
+    env: E,
 }
 
-unsafe impl Sync for Allocator {}
-unsafe impl Send for Allocator {}
+unsafe impl<E: Env> Sync for Allocator<E> {}
+unsafe impl<E: Env> Send for Allocator<E> {}
 
-impl Drop for Allocator {
+impl<E: Env> Drop for Allocator<E> {
     fn drop(&mut self) {
-        crate::env::free_address_space(self.base_address, self.total_space);
+        unsafe {
+            self.env.free_address_space(self.base_address, self.total_space);
+        }
     }
 }
 
-impl Allocator {
-    pub const fn new(total_space: Size) -> Self {
+impl<E: Env> Allocator<E> {
+    pub const fn new(env: E, total_space: Size) -> Self {
         Allocator {
             total_space,
             base_address: core::ptr::null_mut(),
             free_lists_with_unallocated_memory: BitMask::new(),
             first_in_free_list: [Pointer::NULL; BIN_CONFIG.bin_count as usize],
+            env,
         }
     }
 
@@ -584,7 +590,7 @@ impl Allocator {
     #[inline(never)]
     #[cold]
     fn initialize_impl(&mut self) {
-        self.base_address = crate::env::allocate_address_space(self.total_space);
+        self.base_address = unsafe { self.env.allocate_address_space(self.total_space) };
 
         let bin = Self::size_to_bin_round_down(self.total_space);
         self.free_lists_with_unallocated_memory.set(bin);
@@ -753,10 +759,12 @@ impl Allocator {
 
         paranoid_assert!(header_offset >= chunk_offset);
 
-        if !crate::env::expand_memory_until(unsafe {
-            self.base_address
-                .byte_add(data_offset.unchecked_add(requested_size).bytes() as usize)
-        }) {
+        if !unsafe {
+            self.env.expand_memory_until(
+                self.base_address
+                    .byte_add(data_offset.unchecked_add(requested_size).bytes() as usize),
+            )
+        } {
             return None;
         }
 

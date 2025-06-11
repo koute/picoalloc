@@ -1,9 +1,9 @@
 extern crate alloc;
 
 use crate::global_allocator::Mutex;
-use crate::{Allocator, Size};
+use crate::{Allocator, Env, Size};
 
-unsafe impl alloc::alloc::GlobalAlloc for Mutex<Allocator> {
+unsafe impl<E: Env> alloc::alloc::GlobalAlloc for Mutex<Allocator<E>> {
     unsafe fn alloc(&self, layout: alloc::alloc::Layout) -> *mut u8 {
         let Some(align) = Size::from_bytes_usize(layout.align()) else {
             return core::ptr::null_mut();

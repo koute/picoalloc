@@ -143,5 +143,5 @@ pub unsafe extern "C" fn realloc(pointer: *mut c_void, size: usize) -> *mut c_vo
 
 #[no_mangle]
 pub unsafe extern "C" fn malloc_usable_size(pointer: *mut c_void) -> usize {
-    Allocator::usable_size(pointer.cast())
+    Allocator::<crate::System>::usable_size(pointer.cast())
 }

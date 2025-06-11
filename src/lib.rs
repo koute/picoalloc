@@ -14,13 +14,15 @@ mod global_allocator_libc;
 mod global_allocator_rust;
 
 pub use crate::allocator::{Allocator, Size};
+pub use crate::env::{Env, System};
 
 #[doc(hidden)]
 pub use crate::env::abort;
 
+#[cfg(any(all(target_arch = "x86_64", target_os = "linux"), target_env = "polkavm"))]
 #[test]
 fn test_allocator() {
-    let mut allocator = Allocator::new(Size::from_bytes_usize(8 * 1024 * 1024).unwrap());
+    let mut allocator = Allocator::new(System, Size::from_bytes_usize(8 * 1024 * 1024).unwrap());
     let a0 = allocator
         .alloc(Size::from_bytes_usize(1).unwrap(), Size::from_bytes_usize(1).unwrap())
         .unwrap();
@@ -32,9 +34,9 @@ fn test_allocator() {
         .unwrap();
 
     unsafe {
-        assert!(Allocator::usable_size(a0) >= 1);
-        assert_eq!(Allocator::usable_size(a1), 0);
-        assert_eq!(Allocator::usable_size(a2), 0);
+        assert!(Allocator::<System>::usable_size(a0) >= 1);
+        assert_eq!(Allocator::<System>::usable_size(a1), 0);
+        assert_eq!(Allocator::<System>::usable_size(a2), 0);
     }
 
     unsafe {
@@ -71,10 +73,11 @@ fn test_allocator() {
     }
 }
 
+#[cfg(any(all(target_arch = "x86_64", target_os = "linux"), target_env = "polkavm"))]
 #[test]
 fn test_many_small_allocations() {
     extern crate alloc;
-    let mut allocator = Allocator::new(Size::from_bytes_usize(32 * 1024 * 1024).unwrap());
+    let mut allocator = Allocator::new(System, Size::from_bytes_usize(32 * 1024 * 1024).unwrap());
     let mut allocations = alloc::vec::Vec::new();
     for _ in 0..10000 {
         allocations.push(

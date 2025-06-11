@@ -10,7 +10,7 @@ enum Op {
     Free { index: usize },
 }
 
-use picoalloc::{Allocator, Size};
+use picoalloc::{Allocator, System, Size};
 
 fn fill_slice(seed: u128, slice: &mut [u8]) {
     let mut rng = oorandom::Rand64::new(seed);
@@ -27,7 +27,7 @@ fn fill_slice(seed: u128, slice: &mut [u8]) {
 }
 
 fuzz_target!(|ops: Vec<Op>| {
-    let mut allocator = Allocator::new(Size::from_bytes_usize(32 * 1024 * 1024).unwrap());
+    let mut allocator = Allocator::new(System, Size::from_bytes_usize(32 * 1024 * 1024).unwrap());
     let mut allocations: Vec<(*mut u8, Vec<u8>)> = vec![];
     let mut alive_addresses = BTreeSet::new();
 
@@ -42,7 +42,7 @@ fuzz_target!(|ops: Vec<Op>| {
 
                 assert_eq!(pointer.addr() % align, 0);
 
-                let usable_size = unsafe { Allocator::usable_size(pointer) };
+                let usable_size = unsafe { Allocator::<System>::usable_size(pointer) };
                 assert!(usable_size >= size);
 
                 let data = {
