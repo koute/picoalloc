@@ -593,6 +593,7 @@ impl<E: Env> Allocator<E> {
     #[cold]
     fn initialize_impl(&mut self) {
         self.base_address = unsafe { self.env.allocate_address_space(self.total_space) };
+        paranoid_assert_eq!(self.base_address.addr() % ALLOCATION_GRANULARITY as usize, 0);
 
         let bin = Self::size_to_bin_round_down(self.total_space);
         self.free_lists_with_unallocated_memory.set(bin);
