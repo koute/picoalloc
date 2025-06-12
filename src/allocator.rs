@@ -108,13 +108,20 @@ pub type Address = u32;
     target_arch = "aarch64",
     target_arch = "wasm64",
     all(target_arch = "riscv64", not(target_env = "polkavm")),
+    target_arch = "sbf"
 ))]
 pub type Address = u64;
 
 #[cfg(any(target_arch = "x86", target_arch = "riscv32"))]
 type Mask = u32;
 
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64", target_family = "wasm", target_arch = "riscv64"))]
+#[cfg(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_family = "wasm",
+    target_arch = "riscv64",
+    target_arch = "sbf"
+))]
 type Mask = u64;
 
 const fn lowest_set_bit_after(value: Mask, bit_index: u32) -> u32 {
