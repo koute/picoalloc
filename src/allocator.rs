@@ -567,8 +567,8 @@ pub struct Allocator<E: Env> {
     env: E,
 }
 
-unsafe impl<E: Env> Sync for Allocator<E> {}
-unsafe impl<E: Env> Send for Allocator<E> {}
+unsafe impl<E: Env> Sync for Allocator<E> where E: Sync {}
+unsafe impl<E: Env> Send for Allocator<E> where E: Send {}
 
 impl<E: Env> Drop for Allocator<E> {
     fn drop(&mut self) {
