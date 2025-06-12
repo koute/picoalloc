@@ -1,5 +1,5 @@
 use crate::allocator::{Allocator, Size};
-use crate::global_allocator::ALLOCATOR;
+use crate::GLOBAL_ALLOCATOR;
 
 use core::ffi::{c_int, c_void};
 
@@ -88,7 +88,7 @@ pub unsafe extern "C" fn free(pointer: *mut c_void) {
         return;
     }
 
-    let mut allocator = ALLOCATOR.lock();
+    let mut allocator = GLOBAL_ALLOCATOR.lock();
     allocator.free(pointer.cast());
 }
 
@@ -106,7 +106,7 @@ pub unsafe extern "C" fn posix_memalign(result: *mut *mut c_void, align: usize, 
         return ENOMEM;
     };
 
-    let mut allocator = ALLOCATOR.lock();
+    let mut allocator = GLOBAL_ALLOCATOR.lock();
     if let Some(pointer) = allocator.alloc(align, size) {
         unsafe { *result = pointer.cast() }
 

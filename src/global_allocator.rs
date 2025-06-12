@@ -1,75 +1,21 @@
-use core::cell::UnsafeCell;
-use core::ops::{Deref, DerefMut};
-use core::sync::atomic::{AtomicBool, Ordering};
+extern crate alloc;
 
-use crate::allocator::{Allocator, Size};
+use crate::{Allocator, Env, Mutex, Size};
 
-pub struct Mutex<T> {
-    value: UnsafeCell<T>,
-    #[cfg(not(target_env = "polkavm"))]
-    flag: AtomicBool,
-}
+unsafe impl<E: Env> alloc::alloc::GlobalAlloc for Mutex<Allocator<E>> {
+    unsafe fn alloc(&self, layout: alloc::alloc::Layout) -> *mut u8 {
+        let Some(align) = Size::from_bytes_usize(layout.align()) else {
+            return core::ptr::null_mut();
+        };
 
-// SAFETY: It's always safe to send this mutex to another thread.
-unsafe impl<T> Send for Mutex<T> where T: Send {}
+        let Some(size) = Size::from_bytes_usize(layout.size()) else {
+            return core::ptr::null_mut();
+        };
 
-// SAFETY: It's always safe to access this mutex from multiple threads.
-unsafe impl<T> Sync for Mutex<T> where T: Send {}
-
-pub struct MutexGuard<'a, T: 'a>(&'a Mutex<T>);
-
-impl<T> Mutex<T> {
-    #[inline]
-    const fn new(value: T) -> Self {
-        Mutex {
-            value: UnsafeCell::new(value),
-            #[cfg(not(target_env = "polkavm"))]
-            flag: AtomicBool::new(false),
-        }
+        self.lock().alloc(align, size).unwrap_or(core::ptr::null_mut())
     }
 
-    #[inline]
-    pub fn lock(&self) -> MutexGuard<T> {
-        #[cfg(not(target_env = "polkavm"))]
-        {
-            while self
-                .flag
-                .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
-                .is_err()
-            {}
-        }
-
-        MutexGuard(self)
+    unsafe fn dealloc(&self, pointer: *mut u8, _layout: alloc::alloc::Layout) {
+        self.lock().free(pointer);
     }
 }
-
-impl<T> Drop for MutexGuard<'_, T> {
-    #[inline]
-    fn drop(&mut self) {
-        #[cfg(not(target_env = "polkavm"))]
-        self.0.flag.store(false, Ordering::Release);
-    }
-}
-
-impl<T> Deref for MutexGuard<'_, T> {
-    type Target = T;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        // SAFETY: We've locked the mutex, so we can access the data.
-        unsafe { &*self.0.value.get() }
-    }
-}
-
-impl<T> DerefMut for MutexGuard<'_, T> {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: We've locked the mutex, so we can access the data.
-        unsafe { &mut *self.0.value.get() }
-    }
-}
-
-const MAX_TOTAL_ALLOCATED: Size = Size::from_bytes_usize(1024 * 1024 * 1024).unwrap();
-
-#[cfg_attr(feature = "global_allocator_rust", global_allocator)]
-pub(crate) static ALLOCATOR: Mutex<Allocator<crate::System>> = Mutex::new(Allocator::new(crate::System, MAX_TOTAL_ALLOCATED));

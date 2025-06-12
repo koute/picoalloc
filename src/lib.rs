@@ -3,18 +3,22 @@
 
 mod allocator;
 mod env;
+mod mutex;
 
-#[cfg(any(feature = "global_allocator_rust", feature = "global_allocator_libc"))]
+#[cfg(feature = "alloc")]
 mod global_allocator;
 
 #[cfg(feature = "global_allocator_libc")]
 mod global_allocator_libc;
 
-#[cfg(feature = "global_allocator_rust")]
-mod global_allocator_rust;
+#[cfg(any(feature = "global_allocator_rust", feature = "global_allocator_libc"))]
+#[cfg_attr(feature = "global_allocator_rust", global_allocator)]
+pub(crate) static GLOBAL_ALLOCATOR: Mutex<Allocator<System>> =
+    Mutex::new(Allocator::new(System, Size::from_bytes_usize(1024 * 1024 * 1024).unwrap()));
 
 pub use crate::allocator::{Allocator, Size};
 pub use crate::env::{Array, ArrayPointer, Env, System};
+pub use crate::mutex::Mutex;
 
 #[doc(hidden)]
 pub use crate::env::abort;
