@@ -562,6 +562,7 @@ const _: () = {
 
 pub struct Allocator<E: Env> {
     total_space: Size,
+    allocated_space: Size,
     base_address: *mut u8,
     free_lists_with_unallocated_memory: BitMask,
     first_in_free_list: [Pointer<FreeChunkHeader>; BIN_CONFIG.bin_count as usize],
@@ -583,6 +584,7 @@ impl<E: Env> Allocator<E> {
     pub const fn new(env: E, total_space: Size) -> Self {
         Allocator {
             total_space,
+            allocated_space: const { Size::from_bytes_usize(0).unwrap() },
             base_address: core::ptr::null_mut(),
             free_lists_with_unallocated_memory: BitMask::new(),
             first_in_free_list: [Pointer::NULL; BIN_CONFIG.bin_count as usize],
@@ -622,6 +624,8 @@ impl<E: Env> Allocator<E> {
         }
 
         self.base_address = base_address;
+        self.allocated_space = FREE_CHUNK_HEADER_SIZE;
+        self.paranoid_check_access(Pointer::from_pointer(chunk));
 
         let bin = Self::size_to_bin_round_down(self.total_space);
         self.free_lists_with_unallocated_memory.set(bin);
@@ -638,6 +642,7 @@ impl<E: Env> Allocator<E> {
             *get_mut_unchecked(&mut self.first_in_free_list, bin.index()) = Pointer::from_pointer(chunk);
         }
 
+        self.paranoid_check_chunk(Pointer::from_pointer(chunk).cast());
         true
     }
 
@@ -659,6 +664,7 @@ impl<E: Env> Allocator<E> {
 
     #[inline(always)]
     fn unregister_free_space_first_chunk(&mut self, chunk: Pointer<FreeChunkHeader>, bin: BitIndex) {
+        self.paranoid_check_access(chunk);
         paranoid_assert_eq!(self.first_in_free_list[bin.index()], chunk);
 
         unsafe {
@@ -677,6 +683,8 @@ impl<E: Env> Allocator<E> {
 
     #[inline(always)]
     fn unregister_free_space(&mut self, chunk: Pointer<FreeChunkHeader>, bin: BitIndex) {
+        self.paranoid_check_access(chunk);
+
         if unsafe { *get_unchecked(&self.first_in_free_list, bin.index()) } == chunk {
             self.unregister_free_space_first_chunk(chunk, bin);
         } else {
@@ -702,7 +710,7 @@ impl<E: Env> Allocator<E> {
             return prev_chunk_size;
         }
 
-        paranoid_assert!(!chunk.is_null());
+        self.paranoid_check_access(chunk);
 
         let bin = Self::size_to_bin_round_down(size);
         unsafe {
@@ -728,7 +736,8 @@ impl<E: Env> Allocator<E> {
 
     #[inline(always)]
     fn register_allocation(&mut self, chunk: Pointer<ChunkHeader>, prev_chunk_size: Size, size: Size) {
-        paranoid_assert!(!chunk.is_null());
+        self.paranoid_check_access(chunk);
+
         unsafe {
             chunk.write_no_drop(
                 self.base_address,
@@ -769,7 +778,6 @@ impl<E: Env> Allocator<E> {
             })?;
 
         let chunk = unsafe { *get_unchecked(&self.first_in_free_list, bin.index()) };
-        paranoid_assert!(!chunk.is_null());
         self.paranoid_check_chunk(chunk.cast::<ChunkHeader>());
 
         let chunk_size = unsafe { chunk.get_unchecked(self.base_address).size };
@@ -802,8 +810,12 @@ impl<E: Env> Allocator<E> {
             end_offset = end_offset.unchecked_add(FREE_CHUNK_HEADER_SIZE);
         }
 
-        if !unsafe { self.env.expand_memory_until(self.base_address, end_offset) } {
-            return None;
+        if self.allocated_space < end_offset {
+            if !unsafe { self.env.expand_memory_until(self.base_address, end_offset) } {
+                return None;
+            }
+
+            self.allocated_space = end_offset;
         }
 
         unsafe {
@@ -823,6 +835,7 @@ impl<E: Env> Allocator<E> {
             let final_chunk = next_chunk.unchecked_add(free_space_rhs);
 
             if final_chunk.cast() < Pointer::from_pointer(self.base_address).unchecked_add(self.total_space) {
+                self.paranoid_check_access(final_chunk);
                 final_chunk.get_mut_unchecked(self.base_address).prev_chunk_size = prev_chunk_size;
             }
 
@@ -838,20 +851,53 @@ impl<E: Env> Allocator<E> {
         let data: Pointer<u8> = allocation_chunk.unchecked_add(HEADER_SIZE).cast();
         paranoid_assert_eq!(data.address() % align.bytes() as Address, 0);
 
-        Some(data.raw_pointer_mut(self.base_address))
+        let output = data.raw_pointer_mut(self.base_address);
+        self.paranoid_check_chunk(Pointer::from_pointer(output).unchecked_sub(HEADER_SIZE).cast::<ChunkHeader>());
+
+        Some(output)
     }
 
     #[cfg(any(debug_assertions, test, feature = "paranoid"))]
     #[inline(never)]
+    #[track_caller]
+    fn paranoid_check_access<T>(&self, pointer: Pointer<T>) {
+        paranoid_assert!(!pointer.is_null());
+        paranoid_assert!(
+            pointer
+                .address()
+                .wrapping_sub(self.base_address.addr() as Address)
+                .wrapping_add(core::mem::size_of::<T>() as Address)
+                <= Address::from(self.allocated_space.bytes())
+        );
+    }
+
+    #[cfg(not(any(debug_assertions, test, feature = "paranoid")))]
+    #[inline(always)]
+    fn paranoid_check_access<T>(&self, _pointer: Pointer<T>) {}
+
+    #[cfg(any(debug_assertions, test, feature = "paranoid"))]
+    #[inline(never)]
+    #[track_caller]
     fn paranoid_check_chunk(&self, chunk: Pointer<ChunkHeader>) {
         paranoid_assert!(!chunk.is_null());
+        paranoid_assert!(!self.base_address.is_null());
+        paranoid_assert!(!self.total_space.is_empty());
 
         unsafe {
             let base_address = Pointer::from_pointer(self.base_address);
+            paranoid_assert!(chunk.cast() >= base_address);
+
             let end_of_address_space = base_address.unchecked_add(self.total_space);
             if chunk.cast() == end_of_address_space {
                 return;
             }
+
+            paranoid_assert!(chunk.address() < end_of_address_space.address());
+            paranoid_assert!(
+                chunk.address().wrapping_add(core::mem::size_of::<ChunkHeader>() as Address) <= end_of_address_space.address()
+            );
+
+            self.paranoid_check_access(chunk);
 
             let prev_chunk_size = chunk.get_unchecked(self.base_address).prev_chunk_size;
             if prev_chunk_size.is_empty() {
@@ -900,6 +946,8 @@ impl<E: Env> Allocator<E> {
         // Try to merge with the previous free chunk.
         if !Size::from_pointer_and_base_unchecked(chunk, Pointer::from_pointer_mut(self.base_address)).is_empty() {
             let prev_chunk = chunk.unchecked_sub(prev_chunk_size);
+            self.paranoid_check_access(prev_chunk);
+
             let prev_size = unsafe { prev_chunk.get_unchecked(self.base_address).size };
             paranoid_assert_eq!(prev_size.size(), prev_chunk_size);
 
@@ -917,6 +965,8 @@ impl<E: Env> Allocator<E> {
         {
             let next_chunk = chunk.unchecked_add(size);
             if next_chunk.cast() < end_of_address_space {
+                self.paranoid_check_access(next_chunk);
+
                 let next_size = unsafe { next_chunk.get_unchecked(self.base_address).size };
                 if !next_size.is_allocated() {
                     let next_size = next_size.size();
@@ -931,6 +981,7 @@ impl<E: Env> Allocator<E> {
 
         let next_chunk = chunk.unchecked_add(size);
         if next_chunk.cast() < end_of_address_space {
+            self.paranoid_check_access(next_chunk);
             unsafe {
                 next_chunk.get_mut_unchecked(self.base_address).prev_chunk_size = size;
             };
