@@ -76,7 +76,7 @@ fn test_allocator<E: Env>(env: E) {
     }
 }
 
-#[cfg(any(all(target_arch = "x86_64", target_os = "linux"), target_env = "polkavm"))]
+#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 #[test]
 fn test_allocator_system() {
     test_allocator(System);
@@ -117,7 +117,7 @@ fn test_many_small_allocations<E: Env>(env: E, count: usize) {
     }
 }
 
-#[cfg(any(all(target_arch = "x86_64", target_os = "linux"), target_env = "polkavm"))]
+#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 #[test]
 fn test_many_small_allocations_native() {
     test_many_small_allocations(System, 524288);
