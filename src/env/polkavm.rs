@@ -28,13 +28,9 @@ impl Env for System {
     }
 
     #[inline]
-    unsafe fn expand_memory_until(&mut self, end: *mut u8) -> bool {
-        let heap_end = sbrk(0);
-        if heap_end.addr() >= end.addr() {
-            return true;
-        }
-
-        !sbrk(end.addr() - heap_end.addr()).is_null()
+    unsafe fn expand_memory_until(&mut self, base: *mut u8, size: Size) -> bool {
+        let bytes = sbrk(0).addr() - base.addr();
+        bytes >= size.bytes() as usize || !sbrk(size.bytes() as usize - bytes).is_null()
     }
 
     #[inline]

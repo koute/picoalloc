@@ -552,6 +552,7 @@ struct FreeChunkHeader {
 }
 
 const HEADER_SIZE: Size = Size::from_bytes_usize(core::mem::size_of::<ChunkHeader>()).unwrap();
+const FREE_CHUNK_HEADER_SIZE: Size = Size::from_bytes_usize(core::mem::size_of::<FreeChunkHeader>()).unwrap();
 
 const _: () = {
     assert!(core::mem::size_of::<ChunkHeader>() <= ALLOCATION_GRANULARITY as usize);
@@ -590,23 +591,40 @@ impl<E: Env> Allocator<E> {
     }
 
     #[inline(always)]
-    fn initialize(&mut self) {
+    fn initialize(&mut self) -> bool {
         if self.base_address.is_null() {
-            self.initialize_impl();
+            self.initialize_impl()
+        } else {
+            true
         }
     }
 
     #[inline(never)]
     #[cold]
-    fn initialize_impl(&mut self) {
-        self.base_address = unsafe { self.env.allocate_address_space(self.total_space) };
-        paranoid_assert_eq!(self.base_address.addr() % ALLOCATION_GRANULARITY as usize, 0);
+    fn initialize_impl(&mut self) -> bool {
+        let base_address = unsafe { self.env.allocate_address_space(self.total_space) };
+        if base_address.is_null() {
+            return false;
+        }
+
+        paranoid_assert_eq!(base_address.addr() % ALLOCATION_GRANULARITY as usize, 0);
+
+        let chunk = base_address.cast::<FreeChunkHeader>();
+        paranoid_assert!(chunk.is_aligned());
+
+        let is_ok = unsafe { self.env.expand_memory_until(base_address, FREE_CHUNK_HEADER_SIZE) };
+        if !is_ok {
+            unsafe {
+                self.env.free_address_space(base_address, self.total_space);
+            }
+
+            return false;
+        }
+
+        self.base_address = base_address;
 
         let bin = Self::size_to_bin_round_down(self.total_space);
         self.free_lists_with_unallocated_memory.set(bin);
-
-        let chunk = self.base_address.cast::<FreeChunkHeader>();
-        paranoid_assert!(chunk.is_aligned());
 
         let chunk_header = FreeChunkHeader {
             prev_chunk_size: Size(0),
@@ -619,6 +637,8 @@ impl<E: Env> Allocator<E> {
             chunk.write(chunk_header);
             *get_mut_unchecked(&mut self.first_in_free_list, bin.index()) = Pointer::from_pointer(chunk);
         }
+
+        true
     }
 
     #[inline]
@@ -727,7 +747,9 @@ impl<E: Env> Allocator<E> {
             return None;
         }
 
-        self.initialize();
+        if !self.initialize() {
+            return None;
+        }
 
         let min_size = requested_size.checked_add(HEADER_SIZE)?.checked_add(align.unchecked_sub(Size(1)))?;
         if min_size.0 > MAX_ALLOCATION_SIZE.0 {
@@ -769,20 +791,20 @@ impl<E: Env> Allocator<E> {
 
         paranoid_assert!(header_offset >= chunk_offset);
 
-        if !unsafe {
-            self.env.expand_memory_until(
-                self.base_address
-                    .byte_add(data_offset.unchecked_add(requested_size).bytes() as usize),
-            )
-        } {
-            return None;
-        }
-
         let free_space_lhs = header_offset.unchecked_sub(chunk_offset);
         let free_space_rhs = chunk_size
             .unchecked_sub(requested_size)
             .unchecked_sub(free_space_lhs)
             .unchecked_sub(HEADER_SIZE);
+
+        let mut end_offset = data_offset.unchecked_add(requested_size);
+        if !free_space_rhs.is_empty() {
+            end_offset = end_offset.unchecked_add(FREE_CHUNK_HEADER_SIZE);
+        }
+
+        if !unsafe { self.env.expand_memory_until(self.base_address, end_offset) } {
+            return None;
+        }
 
         unsafe {
             let mut prev_chunk_size = chunk.get_unchecked(self.base_address).prev_chunk_size;
