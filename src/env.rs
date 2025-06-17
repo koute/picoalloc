@@ -23,7 +23,7 @@ pub fn abort() -> ! {
 
 pub trait Env {
     unsafe fn allocate_address_space(&mut self, size: Size) -> *mut u8;
-    unsafe fn expand_memory_until(&mut self, end: *mut u8) -> bool;
+    unsafe fn expand_memory_until(&mut self, base: *mut u8, size: Size) -> bool;
     unsafe fn free_address_space(&mut self, base: *mut u8, size: Size);
 }
 
@@ -38,8 +38,8 @@ impl<const SIZE: usize> Env for ArrayPointer<SIZE> {
         self.0.cast()
     }
 
-    unsafe fn expand_memory_until(&mut self, end: *mut u8) -> bool {
-        (end.addr() - self.0.addr()) <= SIZE
+    unsafe fn expand_memory_until(&mut self, _base: *mut u8, size: Size) -> bool {
+        size <= const { Size::from_bytes_usize(SIZE).unwrap() }
     }
 
     unsafe fn free_address_space(&mut self, _base: *mut u8, _size: Size) {}

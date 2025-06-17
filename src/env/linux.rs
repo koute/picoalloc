@@ -68,7 +68,7 @@ impl Env for System {
     }
 
     #[inline]
-    unsafe fn expand_memory_until(&mut self, _end: *mut u8) -> bool {
+    unsafe fn expand_memory_until(&mut self, _base: *mut u8, _size: Size) -> bool {
         true
     }
 
