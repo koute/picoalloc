@@ -1,4 +1,5 @@
-use crate::{Env, Size, System};
+use crate::env::System;
+use crate::{Env, Size};
 
 #[inline]
 fn sbrk(size: usize) -> *mut u8 {
