@@ -3,7 +3,6 @@ use core::ops::{Deref, DerefMut};
 
 pub struct Mutex<T> {
     value: UnsafeCell<T>,
-    #[cfg(not(target_env = "polkavm"))]
     flag: core::sync::atomic::AtomicBool,
 }
 
@@ -20,22 +19,18 @@ impl<T> Mutex<T> {
     pub const fn new(value: T) -> Self {
         Mutex {
             value: UnsafeCell::new(value),
-            #[cfg(not(target_env = "polkavm"))]
             flag: core::sync::atomic::AtomicBool::new(false),
         }
     }
 
     #[inline]
     pub fn lock(&self) -> MutexGuard<T> {
-        #[cfg(not(target_env = "polkavm"))]
-        {
-            use core::sync::atomic::Ordering;
-            while self
-                .flag
-                .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
-                .is_err()
-            {}
-        }
+        use core::sync::atomic::Ordering;
+        while self
+            .flag
+            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {}
 
         MutexGuard(self)
     }
@@ -44,7 +39,6 @@ impl<T> Mutex<T> {
 impl<T> Drop for MutexGuard<'_, T> {
     #[inline]
     fn drop(&mut self) {
-        #[cfg(not(target_env = "polkavm"))]
         self.0.flag.store(false, core::sync::atomic::Ordering::Release);
     }
 }
