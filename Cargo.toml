@@ -30,9 +30,8 @@ panic = "abort"
 
 [features]
 default = []
-alloc = []
 global_allocator_libc = []
-global_allocator_rust = ["alloc"]
+global_allocator_rust = []
 paranoid = ["strict_provenance"]
 strict_provenance = []
 corevm = ["dep:polkavm-derive"]

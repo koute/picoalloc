@@ -955,12 +955,8 @@ impl<E: Env> Allocator<E> {
     }
 }
 
-#[cfg(feature = "alloc")]
-extern crate alloc;
-
-#[cfg(feature = "alloc")]
-unsafe impl<E: crate::Env> alloc::alloc::GlobalAlloc for crate::Mutex<Allocator<E>> {
-    unsafe fn alloc(&self, layout: alloc::alloc::Layout) -> *mut u8 {
+unsafe impl<E: crate::Env> core::alloc::GlobalAlloc for crate::Mutex<Allocator<E>> {
+    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
         let Some(align) = Size::from_bytes_usize(layout.align()) else {
             return core::ptr::null_mut();
         };
@@ -972,7 +968,7 @@ unsafe impl<E: crate::Env> alloc::alloc::GlobalAlloc for crate::Mutex<Allocator<
         self.lock().alloc(align, size).unwrap_or(core::ptr::null_mut())
     }
 
-    unsafe fn dealloc(&self, pointer: *mut u8, _layout: alloc::alloc::Layout) {
+    unsafe fn dealloc(&self, pointer: *mut u8, _layout: core::alloc::Layout) {
         self.lock().free(pointer);
     }
 }
