@@ -5,9 +5,6 @@ mod allocator;
 mod env;
 mod mutex;
 
-#[cfg(feature = "alloc")]
-mod global_allocator;
-
 #[cfg(feature = "global_allocator_libc")]
 mod global_allocator_libc;
 
