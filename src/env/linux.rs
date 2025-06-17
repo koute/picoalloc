@@ -1,5 +1,5 @@
-use crate::env::abort;
-use crate::{Env, Size, System};
+use crate::env::{abort, System};
+use crate::{Env, Size};
 
 #[inline]
 fn abort_on_fail(result: usize) -> usize {

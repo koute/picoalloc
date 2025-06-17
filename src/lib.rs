@@ -13,15 +13,20 @@ mod global_allocator_libc;
 
 #[cfg(any(feature = "global_allocator_rust", feature = "global_allocator_libc"))]
 #[cfg_attr(feature = "global_allocator_rust", global_allocator)]
-pub(crate) static GLOBAL_ALLOCATOR: Mutex<Allocator<System>> =
-    Mutex::new(Allocator::new(System, Size::from_bytes_usize(1024 * 1024 * 1024).unwrap()));
+pub(crate) static GLOBAL_ALLOCATOR: Mutex<Allocator<crate::env::System>> = Mutex::new(Allocator::new(
+    crate::env::System,
+    Size::from_bytes_usize(1024 * 1024 * 1024).unwrap(),
+));
 
 pub use crate::allocator::{Allocator, Size};
-pub use crate::env::{Array, ArrayPointer, Env, System};
+pub use crate::env::{Array, ArrayPointer, Env};
 pub use crate::mutex::Mutex;
 
 #[doc(hidden)]
 pub use crate::env::abort;
+
+#[doc(hidden)]
+pub use crate::env::System as UnsafeSystem;
 
 #[cfg(test)]
 fn test_allocator<E: Env>(env: E) {
@@ -79,7 +84,7 @@ fn test_allocator<E: Env>(env: E) {
 #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 #[test]
 fn test_allocator_system() {
-    test_allocator(System);
+    test_allocator(crate::env::System);
 }
 
 #[test]
@@ -120,7 +125,7 @@ fn test_many_small_allocations<E: Env>(env: E, count: usize) {
 #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 #[test]
 fn test_many_small_allocations_native() {
-    test_many_small_allocations(System, 524288);
+    test_many_small_allocations(crate::env::System, 524288);
 }
 
 #[test]
