@@ -13,6 +13,9 @@ cargo test --all --release
 echo ">> cargo test (paranoid)"
 cargo test --features paranoid
 
+echo ">> cargo test (paranoid, global allocator)"
+cargo test --features paranoid,global_allocator_rust
+
 echo ">> cargo build (native)"
 cargo build -p picoalloc_native --release
 
