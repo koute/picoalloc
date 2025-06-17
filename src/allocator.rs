@@ -769,13 +769,17 @@ impl<E: Env> Allocator<E> {
         //
         // First calculate the minimum bin to fit this allocation; round up in case the size doesn't match the bin size exactly.
         // If this doesn't work then try rounding down and see if maybe we can find an oversized region in the previous bin.
-        let bin = self
+        let mut bin = self
             .free_lists_with_unallocated_memory
-            .find_first(Self::size_to_bin_round_up(min_size))
-            .or_else(|| {
-                self.free_lists_with_unallocated_memory
-                    .find_first(Self::size_to_bin_round_down(min_size))
-            })?;
+            .find_first(Self::size_to_bin_round_up(min_size));
+
+        if bin.is_none() {
+            bin = self
+                .free_lists_with_unallocated_memory
+                .find_first(Self::size_to_bin_round_down(min_size));
+        }
+
+        let bin = bin?;
 
         let chunk = unsafe { *get_unchecked(&self.first_in_free_list, bin.index()) };
         self.paranoid_check_chunk(chunk.cast::<ChunkHeader>());
