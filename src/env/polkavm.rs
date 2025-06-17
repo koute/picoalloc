@@ -19,12 +19,22 @@ impl Env for System {
     #[inline]
     unsafe fn allocate_address_space(&mut self, _size: Size) -> *mut u8 {
         unsafe {
-            let mut output;
+            let mut pointer: *mut u8;
             core::arch::asm!(
                 ".insn r 0xb, 3, 0, {dst}, zero, zero",
-                dst = out(reg) output,
+                dst = out(reg) pointer,
             );
-            output
+
+            let aligned_pointer = pointer.with_addr(pointer.addr().next_multiple_of(32));
+            let sbrk_pointer = sbrk(0);
+            if sbrk_pointer.addr() < aligned_pointer.addr() {
+                let bytes = aligned_pointer.addr() - sbrk_pointer.addr();
+                if sbrk(bytes).is_null() {
+                    return core::ptr::null_mut();
+                }
+            }
+
+            aligned_pointer
         }
     }
 
