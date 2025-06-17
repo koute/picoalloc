@@ -5,6 +5,7 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 cd ..
 
 ./ci/jobs/build-and-test.sh
+./ci/jobs/build-and-test-wasm.sh
 
 case "$OSTYPE" in
   linux*)
