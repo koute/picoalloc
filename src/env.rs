@@ -55,3 +55,6 @@ mod polkavm;
 
 #[cfg(all(target_env = "polkavm", feature = "corevm"))]
 mod corevm;
+
+#[cfg(target_family = "wasm")]
+mod wasm;
