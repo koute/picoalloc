@@ -87,7 +87,7 @@ fn test_allocator_system() {
 #[test]
 fn test_allocator_buffer() {
     let mut buffer = Array([0_u8; 4096]);
-    test_allocator(ArrayPointer(&mut buffer));
+    test_allocator(unsafe { ArrayPointer::new(&mut buffer) });
 }
 
 #[cfg(test)]
@@ -137,7 +137,7 @@ fn test_many_small_allocations_buffer() {
         sentinel: [0b10101010; 64],
     };
 
-    test_many_small_allocations(ArrayPointer(&mut storage.buffer), 255);
+    test_many_small_allocations(unsafe { ArrayPointer::new(&mut storage.buffer) }, 255);
     unsafe {
         for offset in 0..storage.sentinel.len() {
             // Make sure there were no out-of-bounds writes.

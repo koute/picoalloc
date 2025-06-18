@@ -31,7 +31,13 @@ pub trait Env {
 pub struct Array<const SIZE: usize>(pub [u8; SIZE]);
 
 #[repr(transparent)]
-pub struct ArrayPointer<const SIZE: usize>(pub *mut Array<SIZE>);
+pub struct ArrayPointer<const SIZE: usize>(*mut Array<SIZE>);
+
+impl<const SIZE: usize> ArrayPointer<SIZE> {
+    pub const unsafe fn new(array: *mut Array<SIZE>) -> Self {
+        ArrayPointer(array)
+    }
+}
 
 impl<const SIZE: usize> Env for ArrayPointer<SIZE> {
     unsafe fn allocate_address_space(&mut self, _size: Size) -> *mut u8 {
