@@ -192,3 +192,51 @@ fn test_boundary() {
         .alloc(Size::from_bytes_usize(1).unwrap(), Size::from_bytes_usize(33).unwrap())
         .is_none());
 }
+
+#[test]
+fn test_shrink() {
+    let one = Size::from_bytes_usize(32).unwrap();
+    let two = Size::from_bytes_usize(64).unwrap();
+
+    let mut buffer = Array([0_u8; 128]);
+    let mut alloc = Allocator::new(unsafe { ArrayPointer::new(&mut buffer) }, Size::from_bytes_usize(128).unwrap());
+
+    let a = alloc.alloc(one, two).unwrap();
+    assert!(alloc.alloc(one, one).is_none());
+    unsafe { alloc.free(a) };
+
+    let a = alloc.alloc(one, one).unwrap();
+    let b = alloc.alloc(one, one).unwrap();
+    unsafe { alloc.free(a) };
+    unsafe { alloc.free(b) };
+
+    let a = alloc.alloc(one, two).unwrap();
+    assert_eq!(unsafe { Allocator::<ArrayPointer<128>>::usable_size(a) }, 64);
+    assert!(alloc.alloc(one, one).is_none());
+    unsafe {
+        alloc.shrink_inplace(a, one);
+    }
+    assert_eq!(unsafe { Allocator::<ArrayPointer<128>>::usable_size(a) }, 32);
+    let b = alloc.alloc(one, one).unwrap();
+    unsafe { alloc.free(a) };
+    unsafe { alloc.free(b) };
+}
+
+#[test]
+fn test_grow() {
+    let one = Size::from_bytes_usize(32).unwrap();
+    let two = Size::from_bytes_usize(64).unwrap();
+
+    let mut buffer = Array([0_u8; 128]);
+    let mut alloc = Allocator::new(unsafe { ArrayPointer::new(&mut buffer) }, Size::from_bytes_usize(128).unwrap());
+
+    let a = alloc.alloc(one, one).unwrap();
+    let b = alloc.alloc(one, one).unwrap();
+
+    assert!(unsafe { alloc.grow_inplace(a, two) }.is_none());
+
+    unsafe { alloc.free(b) };
+
+    assert_eq!(unsafe { alloc.grow_inplace(a, two) }, Some(two));
+    assert_eq!(unsafe { Allocator::<ArrayPointer<128>>::usable_size(a) }, 64);
+}
