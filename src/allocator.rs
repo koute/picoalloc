@@ -782,14 +782,12 @@ impl<E: Env> Allocator<E> {
         //
         // First calculate the minimum bin to fit this allocation; round up in case the size doesn't match the bin size exactly.
         // If this doesn't work then try rounding down and see if maybe we can find an oversized region in the previous bin.
-        let mut bin = self
-            .free_lists_with_unallocated_memory
-            .find_first(Self::size_to_bin_round_up(min_size));
+        let min_size_round_up = Self::size_to_bin_round_up(min_size);
+        let min_size_round_down = Self::size_to_bin_round_down(min_size);
+        let mut bin = self.free_lists_with_unallocated_memory.find_first(min_size_round_up);
 
         if bin.is_none() {
-            bin = self
-                .free_lists_with_unallocated_memory
-                .find_first(Self::size_to_bin_round_down(min_size));
+            bin = self.free_lists_with_unallocated_memory.find_first(min_size_round_down);
         }
 
         let bin = bin?;
