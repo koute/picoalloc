@@ -3,6 +3,7 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use std::collections::BTreeSet;
+use core::ptr::NonNull;
 
 #[derive(Arbitrary, Debug)]
 enum Op {
@@ -28,7 +29,7 @@ fn fill_slice(seed: u128, slice: &mut [u8]) {
 
 fuzz_target!(|ops: Vec<Op>| {
     let mut allocator = Allocator::new(UnsafeSystem, Size::from_bytes_usize(32 * 1024 * 1024).unwrap());
-    let mut allocations: Vec<(*mut u8, Vec<u8>)> = vec![];
+    let mut allocations: Vec<(NonNull<u8>, Vec<u8>)> = vec![];
     let mut alive_addresses = BTreeSet::new();
 
     for method in ops {
@@ -40,15 +41,15 @@ fuzz_target!(|ops: Vec<Op>| {
                     .alloc(Size::from_bytes_usize(align).unwrap(), Size::from_bytes_usize(size).unwrap())
                     .unwrap();
 
-                assert_eq!(pointer.addr() % align, 0);
+                assert_eq!(pointer.as_ptr().addr() % align, 0);
 
                 let usable_size = unsafe { Allocator::<UnsafeSystem>::usable_size(pointer) };
                 assert!(usable_size >= size);
 
                 let data = {
-                    let slice: &mut [u8] = unsafe { core::slice::from_raw_parts_mut(pointer, usable_size) };
+                    let slice: &mut [u8] = unsafe { core::slice::from_raw_parts_mut(pointer.as_ptr(), usable_size) };
 
-                    fill_slice(pointer.addr() as u128, slice);
+                    fill_slice(pointer.as_ptr().addr() as u128, slice);
                     slice.to_vec()
                 };
 
@@ -59,7 +60,7 @@ fuzz_target!(|ops: Vec<Op>| {
                 if !allocations.is_empty() {
                     let index = index % allocations.len();
                     let (pointer, expected_data) = allocations.swap_remove(index);
-                    let slice = unsafe { core::slice::from_raw_parts(pointer, expected_data.len()) };
+                    let slice = unsafe { core::slice::from_raw_parts(pointer.as_ptr(), expected_data.len()) };
 
                     assert!(alive_addresses.remove(&pointer));
 

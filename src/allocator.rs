@@ -1,6 +1,7 @@
 #![allow(clippy::unnecessary_cast)]
 
 use crate::Env;
+use core::ptr::NonNull;
 
 #[cfg(any(debug_assertions, test, feature = "paranoid"))]
 macro_rules! paranoid_assert {
@@ -753,17 +754,17 @@ impl<E: Env> Allocator<E> {
 
     /// Allocates zeroed memory.
     #[inline(always)]
-    pub fn alloc_zeroed(&mut self, align: Size, requested_size: Size) -> Option<*mut u8> {
+    pub fn alloc_zeroed(&mut self, align: Size, requested_size: Size) -> Option<NonNull<u8>> {
         self.alloc_impl(align, requested_size, true)
     }
 
     /// Allocates memory.
     #[inline(always)]
-    pub fn alloc(&mut self, align: Size, requested_size: Size) -> Option<*mut u8> {
+    pub fn alloc(&mut self, align: Size, requested_size: Size) -> Option<NonNull<u8>> {
         self.alloc_impl(align, requested_size, false)
     }
 
-    fn alloc_impl(&mut self, align: Size, requested_size: Size, is_calloc: bool) -> Option<*mut u8> {
+    fn alloc_impl(&mut self, align: Size, requested_size: Size, is_calloc: bool) -> Option<NonNull<u8>> {
         if align.0 == 0 || !align.0.is_power_of_two() {
             return None;
         }
@@ -877,7 +878,7 @@ impl<E: Env> Allocator<E> {
             }
         }
 
-        Some(output)
+        Some(unsafe { NonNull::new_unchecked(output) })
     }
 
     #[cfg(any(debug_assertions, test, feature = "paranoid"))]
@@ -956,16 +957,13 @@ impl<E: Env> Allocator<E> {
     /// # Safety
     ///
     /// The `pointer` must have come from [`Allocator::alloc`](Allocator::alloc), and must not have been passed to [`Allocator::free`](Allocator::free) beforehand.
-    pub unsafe fn shrink_inplace(&mut self, pointer: *mut u8, new_size: Size) {
-        if pointer.is_null() {
-            return;
-        }
-
+    pub unsafe fn shrink_inplace(&mut self, pointer: NonNull<u8>, new_size: Size) {
         if new_size.is_empty() {
             self.free(pointer);
             return;
         }
 
+        let pointer = pointer.as_ptr();
         let new_size = new_size.unchecked_add(HEADER_SIZE);
 
         let chunk = Pointer::from_pointer(pointer).unchecked_sub(HEADER_SIZE).cast::<ChunkHeader>();
@@ -1015,15 +1013,10 @@ impl<E: Env> Allocator<E> {
     /// # Safety
     ///
     /// The `pointer` must have come from [`Allocator::alloc`](Allocator::alloc), and must not have been passed to [`Allocator::free`](Allocator::free) beforehand.
-    pub unsafe fn grow_inplace(&mut self, pointer: *mut u8, new_size: Size) -> Option<Size> {
-        if pointer.is_null() {
-            return None;
-        }
+    pub unsafe fn grow_inplace(&mut self, pointer: NonNull<u8>, new_size: Size) -> Option<Size> {
+        let new_size = new_size.checked_add(HEADER_SIZE)?;
 
-        let Some(new_size) = new_size.checked_add(HEADER_SIZE) else {
-            return None;
-        };
-
+        let pointer = pointer.as_ptr();
         let chunk = Pointer::from_pointer(pointer).unchecked_sub(HEADER_SIZE).cast::<ChunkHeader>();
         self.paranoid_check_chunk(chunk);
 
@@ -1093,7 +1086,7 @@ impl<E: Env> Allocator<E> {
     /// # Safety
     ///
     /// The `pointer` must have come from [`Allocator::alloc`](Allocator::alloc), and must not have been passed to [`Allocator::free`](Allocator::free) beforehand.
-    pub unsafe fn realloc(&mut self, pointer: *mut u8, align: Size, new_size: Size) -> Option<*mut u8> {
+    pub unsafe fn realloc(&mut self, pointer: NonNull<u8>, align: Size, new_size: Size) -> Option<NonNull<u8>> {
         let current_size = Self::usable_size_impl(pointer);
         if new_size == current_size {
             return Some(pointer);
@@ -1116,7 +1109,7 @@ impl<E: Env> Allocator<E> {
         }
 
         let new_pointer = self.alloc(align, new_size)?;
-        core::ptr::copy_nonoverlapping(pointer, new_pointer, current_size.bytes() as usize);
+        core::ptr::copy_nonoverlapping(pointer.as_ptr(), new_pointer.as_ptr(), current_size.bytes() as usize);
         self.free(pointer);
 
         Some(new_pointer)
@@ -1127,10 +1120,8 @@ impl<E: Env> Allocator<E> {
     /// # Safety
     ///
     /// The `pointer` must have come from [`Allocator::alloc`](Allocator::alloc), and must not have been passed to [`Allocator::free`](Allocator::free) beforehand.
-    pub unsafe fn free(&mut self, pointer: *mut u8) {
-        if pointer.is_null() {
-            return;
-        }
+    pub unsafe fn free(&mut self, pointer: NonNull<u8>) {
+        let pointer = pointer.as_ptr();
 
         paranoid_assert!(!self.base_address.is_null());
 
@@ -1196,13 +1187,13 @@ impl<E: Env> Allocator<E> {
     ///
     /// The `pointer` must have come from [`Allocator::alloc`](Allocator::alloc), and must not have been passed to [`Allocator::free`](Allocator::free) beforehand.
     #[inline]
-    pub unsafe fn usable_size(pointer: *mut u8) -> usize {
+    pub unsafe fn usable_size(pointer: NonNull<u8>) -> usize {
         Self::usable_size_impl(pointer).bytes() as usize
     }
 
     #[inline]
-    unsafe fn usable_size_impl(pointer: *mut u8) -> Size {
-        Self::header_for_pointer(pointer).size.size().unchecked_sub(HEADER_SIZE)
+    unsafe fn usable_size_impl(pointer: NonNull<u8>) -> Size {
+        Self::header_for_pointer(pointer.as_ptr()).size.size().unchecked_sub(HEADER_SIZE)
     }
 
     #[inline]
@@ -1221,7 +1212,11 @@ unsafe impl<E: crate::Env> core::alloc::GlobalAlloc for crate::Mutex<Allocator<E
             return core::ptr::null_mut();
         };
 
-        self.lock().alloc(align, size).unwrap_or(core::ptr::null_mut())
+        if let Some(pointer) = self.lock().alloc(align, size) {
+            pointer.as_ptr()
+        } else {
+            core::ptr::null_mut()
+        }
     }
 
     unsafe fn alloc_zeroed(&self, layout: core::alloc::Layout) -> *mut u8 {
@@ -1233,10 +1228,18 @@ unsafe impl<E: crate::Env> core::alloc::GlobalAlloc for crate::Mutex<Allocator<E
             return core::ptr::null_mut();
         };
 
-        self.lock().alloc_zeroed(align, size).unwrap_or(core::ptr::null_mut())
+        if let Some(pointer) = self.lock().alloc_zeroed(align, size) {
+            pointer.as_ptr()
+        } else {
+            core::ptr::null_mut()
+        }
     }
 
     unsafe fn realloc(&self, pointer: *mut u8, layout: core::alloc::Layout, new_size: usize) -> *mut u8 {
+        let Some(pointer) = NonNull::new(pointer) else {
+            return core::ptr::null_mut();
+        };
+
         let Some(align) = Size::from_bytes_usize(layout.align()) else {
             return core::ptr::null_mut();
         };
@@ -1245,10 +1248,16 @@ unsafe impl<E: crate::Env> core::alloc::GlobalAlloc for crate::Mutex<Allocator<E
             return core::ptr::null_mut();
         };
 
-        self.lock().realloc(pointer, align, new_size).unwrap_or(core::ptr::null_mut())
+        if let Some(pointer) = self.lock().realloc(pointer, align, new_size) {
+            pointer.as_ptr()
+        } else {
+            core::ptr::null_mut()
+        }
     }
 
     unsafe fn dealloc(&self, pointer: *mut u8, _layout: core::alloc::Layout) {
-        self.lock().free(pointer);
+        if let Some(pointer) = NonNull::new(pointer) {
+            self.lock().free(pointer);
+        }
     }
 }

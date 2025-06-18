@@ -2,6 +2,7 @@ use crate::allocator::{Allocator, Size};
 use crate::GLOBAL_ALLOCATOR;
 
 use core::ffi::{c_int, c_void};
+use core::ptr::NonNull;
 
 const ENOMEM: c_int = 12;
 const EINVAL: c_int = 22;
@@ -55,7 +56,7 @@ pub extern "C" fn calloc(count: usize, size: usize) -> *mut c_void {
     };
 
     if let Some(pointer) = pointer {
-        pointer.cast()
+        pointer.as_ptr().cast()
     } else {
         set_errno(ENOMEM);
         core::ptr::null_mut()
@@ -94,12 +95,12 @@ pub extern "C" fn malloc(size: usize) -> *mut c_void {
 
 #[no_mangle]
 pub unsafe extern "C" fn free(pointer: *mut c_void) {
-    if pointer.is_null() {
+    let Some(pointer) = NonNull::new(pointer.cast::<u8>()) else {
         return;
-    }
+    };
 
     let mut allocator = GLOBAL_ALLOCATOR.lock();
-    allocator.free(pointer.cast());
+    allocator.free(pointer);
 }
 
 #[no_mangle]
@@ -118,7 +119,7 @@ pub unsafe extern "C" fn posix_memalign(result: *mut *mut c_void, align: usize, 
 
     let mut allocator = GLOBAL_ALLOCATOR.lock();
     if let Some(pointer) = allocator.alloc(align, size) {
-        unsafe { *result = pointer.cast() }
+        unsafe { *result = pointer.as_ptr().cast() }
 
         0
     } else {
@@ -128,12 +129,12 @@ pub unsafe extern "C" fn posix_memalign(result: *mut *mut c_void, align: usize, 
 
 #[no_mangle]
 pub unsafe extern "C" fn realloc(pointer: *mut c_void, size: usize) -> *mut c_void {
-    if pointer.is_null() {
+    let Some(pointer) = NonNull::new(pointer) else {
         return malloc(size);
-    }
+    };
 
     if size == 0 {
-        free(pointer);
+        free(pointer.as_ptr());
         return core::ptr::null_mut();
     }
 
@@ -144,7 +145,7 @@ pub unsafe extern "C" fn realloc(pointer: *mut c_void, size: usize) -> *mut c_vo
 
     let mut allocator = GLOBAL_ALLOCATOR.lock();
     if let Some(pointer) = allocator.realloc(pointer.cast::<u8>(), const { Size::from_bytes_usize(1).unwrap() }, size) {
-        pointer.cast()
+        pointer.as_ptr().cast()
     } else {
         set_errno(ENOMEM);
         core::ptr::null_mut()
@@ -153,5 +154,8 @@ pub unsafe extern "C" fn realloc(pointer: *mut c_void, size: usize) -> *mut c_vo
 
 #[no_mangle]
 pub unsafe extern "C" fn malloc_usable_size(pointer: *mut c_void) -> usize {
+    let Some(pointer) = NonNull::new(pointer) else {
+        return 0;
+    };
     Allocator::<crate::env::System>::usable_size(pointer.cast())
 }

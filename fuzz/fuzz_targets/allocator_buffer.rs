@@ -3,6 +3,7 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use std::collections::BTreeSet;
+use core::ptr::NonNull;
 
 #[derive(Arbitrary, Debug)]
 enum Op {
@@ -66,7 +67,7 @@ type DefaultEnv = TestEnv<16384, 2048>;
 fuzz_target!(|ops: Vec<Op>| {
     let env = DefaultEnv::default();
     let mut allocator = Allocator::new(env, Size::from_bytes_usize(1024 * 1024).unwrap());
-    let mut allocations: Vec<(*mut u8, Vec<u8>)> = vec![];
+    let mut allocations: Vec<(NonNull<u8>, Vec<u8>)> = vec![];
     let mut alive_addresses = BTreeSet::new();
 
     for method in ops {
@@ -79,16 +80,16 @@ fuzz_target!(|ops: Vec<Op>| {
                     continue;
                 };
 
-                assert_eq!(pointer.addr() % align, 0);
+                assert_eq!(pointer.as_ptr().addr() % align, 0);
 
                 let usable_size = unsafe { Allocator::<DefaultEnv>::usable_size(pointer) };
                 assert!(usable_size >= size);
 
                 let data = {
-                    let slice: &mut [u8] = unsafe { core::slice::from_raw_parts_mut(pointer, usable_size) };
+                    let slice: &mut [u8] = unsafe { core::slice::from_raw_parts_mut(pointer.as_ptr(), usable_size) };
                     assert!(slice.iter().copied().all(|byte| byte == 0));
 
-                    fill_slice(pointer.addr() as u128, slice);
+                    fill_slice(pointer.as_ptr().addr() as u128, slice);
                     slice.to_vec()
                 };
 
@@ -99,7 +100,7 @@ fuzz_target!(|ops: Vec<Op>| {
                 if !allocations.is_empty() {
                     let index = index % allocations.len();
                     let (pointer, expected_data) = allocations.swap_remove(index);
-                    let slice = unsafe { core::slice::from_raw_parts(pointer, expected_data.len()) };
+                    let slice = unsafe { core::slice::from_raw_parts(pointer.as_ptr(), expected_data.len()) };
 
                     assert!(alive_addresses.remove(&pointer));
 
@@ -119,14 +120,14 @@ fuzz_target!(|ops: Vec<Op>| {
                 let index = index % allocations.len();
                 {
                     let &(pointer, ref expected_data) = &allocations[index];
-                    let slice = unsafe { core::slice::from_raw_parts(pointer, expected_data.len()) };
+                    let slice = unsafe { core::slice::from_raw_parts(pointer.as_ptr(), expected_data.len()) };
                     assert!(slice == expected_data);
                 }
                 allocations[index].1.truncate(size.bytes().try_into().unwrap());
                 unsafe { allocator.shrink_inplace(allocations[index].0, size) }
 
                 let &(pointer, ref expected_data) = &allocations[index];
-                let slice = unsafe { core::slice::from_raw_parts(pointer, expected_data.len()) };
+                let slice = unsafe { core::slice::from_raw_parts(pointer.as_ptr(), expected_data.len()) };
                 assert!(slice == expected_data);
             }
             Op::Grow { index, size } => {
@@ -147,14 +148,14 @@ fuzz_target!(|ops: Vec<Op>| {
                     allocations[index].1.resize(new_size, 0);
                     {
                         let &mut (pointer, ref mut expected_data) = &mut allocations[index];
-                        let slice_actual = unsafe { core::slice::from_raw_parts_mut(pointer.add(old_size), new_size - old_size) };
+                        let slice_actual = unsafe { core::slice::from_raw_parts_mut(pointer.add(old_size).as_ptr(), new_size - old_size) };
                         let slice_expected = &mut expected_data[old_size..new_size];
-                        fill_slice((pointer.addr() ^ 0b10101010) as u128, slice_expected);
+                        fill_slice((pointer.as_ptr().addr() ^ 0b10101010) as u128, slice_expected);
                         slice_actual.copy_from_slice(slice_expected);
                     }
 
                     let &(pointer, ref expected_data) = &allocations[index];
-                    let slice = unsafe { core::slice::from_raw_parts(pointer, expected_data.len()) };
+                    let slice = unsafe { core::slice::from_raw_parts(pointer.as_ptr(), expected_data.len()) };
                     assert!(slice == expected_data);
                 }
             }
