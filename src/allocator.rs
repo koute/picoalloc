@@ -749,9 +749,27 @@ impl<E: Env> Allocator<E> {
         }
     }
 
+    /// Allocates zeroed memory.
+    #[inline]
+    pub fn alloc_zeroed(&mut self, align: Size, requested_size: Size) -> Option<*mut u8> {
+        let (pointer, is_zeroed) = self.alloc_impl(align, requested_size)?;
+        if !is_zeroed {
+            unsafe {
+                pointer.write_bytes(0, requested_size.bytes() as usize);
+            }
+        }
+
+        Some(pointer)
+    }
+
     /// Allocates memory.
     #[inline]
     pub fn alloc(&mut self, align: Size, requested_size: Size) -> Option<*mut u8> {
+        self.alloc_impl(align, requested_size).map(|(pointer, _)| pointer)
+    }
+
+    #[inline]
+    fn alloc_impl(&mut self, align: Size, requested_size: Size) -> Option<(*mut u8, bool)> {
         if align.0 == 0 || !align.0.is_power_of_two() {
             return None;
         }
@@ -814,6 +832,7 @@ impl<E: Env> Allocator<E> {
             end_offset = end_offset.unchecked_add(FREE_CHUNK_HEADER_SIZE);
         }
 
+        let is_zeroed = self.allocated_space <= data_offset;
         if self.allocated_space < end_offset {
             if !unsafe { self.env.expand_memory_until(self.base_address, end_offset) } {
                 return None;
@@ -858,7 +877,7 @@ impl<E: Env> Allocator<E> {
         let output = data.raw_pointer_mut(self.base_address);
         self.paranoid_check_chunk(Pointer::from_pointer(output).unchecked_sub(HEADER_SIZE).cast::<ChunkHeader>());
 
-        Some(output)
+        Some((output, is_zeroed))
     }
 
     #[cfg(any(debug_assertions, test, feature = "paranoid"))]
@@ -1021,6 +1040,18 @@ unsafe impl<E: crate::Env> core::alloc::GlobalAlloc for crate::Mutex<Allocator<E
         };
 
         self.lock().alloc(align, size).unwrap_or(core::ptr::null_mut())
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: core::alloc::Layout) -> *mut u8 {
+        let Some(align) = Size::from_bytes_usize(layout.align()) else {
+            return core::ptr::null_mut();
+        };
+
+        let Some(size) = Size::from_bytes_usize(layout.size()) else {
+            return core::ptr::null_mut();
+        };
+
+        self.lock().alloc_zeroed(align, size).unwrap_or(core::ptr::null_mut())
     }
 
     unsafe fn dealloc(&self, pointer: *mut u8, _layout: core::alloc::Layout) {
