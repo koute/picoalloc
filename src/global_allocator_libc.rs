@@ -137,18 +137,18 @@ pub unsafe extern "C" fn realloc(pointer: *mut c_void, size: usize) -> *mut c_vo
         return core::ptr::null_mut();
     }
 
-    // FIXME: Implement a proper realloc.
-    let output = malloc(size);
-    if !output.is_null() {
-        let copy_size = core::cmp::min(malloc_usable_size(pointer), size);
-        unsafe {
-            core::ptr::copy_nonoverlapping(pointer.cast::<u8>(), output.cast::<u8>(), copy_size);
-        }
+    let Some(size) = Size::from_bytes_usize(size) else {
+        set_errno(ENOMEM);
+        return core::ptr::null_mut();
+    };
 
-        free(pointer);
+    let mut allocator = GLOBAL_ALLOCATOR.lock();
+    if let Some(pointer) = allocator.realloc(pointer.cast::<u8>(), const { Size::from_bytes_usize(1).unwrap() }, size) {
+        pointer.cast()
+    } else {
+        set_errno(ENOMEM);
+        core::ptr::null_mut()
     }
-
-    output
 }
 
 #[no_mangle]

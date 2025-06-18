@@ -29,12 +29,13 @@ opt-level = "s"
 panic = "abort"
 
 [features]
-default = []
+default = ["realloc_inplace"]
 global_allocator_libc = []
 global_allocator_rust = []
 paranoid = ["strict_provenance"]
 strict_provenance = []
 corevm = ["dep:polkavm-derive"]
+realloc_inplace = []
 
 [dependencies]
 polkavm-derive = { version = "0.24.0", optional = true }

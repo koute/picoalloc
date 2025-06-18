@@ -951,12 +951,182 @@ impl<E: Env> Allocator<E> {
     #[cfg(not(any(debug_assertions, test, feature = "paranoid")))]
     fn paranoid_check_chunk(&self, _chunk: Pointer<ChunkHeader>) {}
 
+    /// Shrinks the memory allocation to at most the given size.
+    ///
+    /// # Safety
+    ///
+    /// The `pointer` must have come from [`Allocator::alloc`](Allocator::alloc), and must not have been passed to [`Allocator::free`](Allocator::free) beforehand.
+    pub unsafe fn shrink_inplace(&mut self, pointer: *mut u8, new_size: Size) {
+        if pointer.is_null() {
+            return;
+        }
+
+        if new_size.is_empty() {
+            self.free(pointer);
+            return;
+        }
+
+        let new_size = new_size.unchecked_add(HEADER_SIZE);
+
+        let chunk = Pointer::from_pointer(pointer).unchecked_sub(HEADER_SIZE).cast::<ChunkHeader>();
+        self.paranoid_check_chunk(chunk);
+
+        let current_size = unsafe { chunk.get_unchecked(self.base_address).size };
+        paranoid_assert!(current_size.is_allocated());
+
+        let current_size = current_size.size();
+        if new_size >= current_size {
+            return;
+        }
+
+        let mut free_space = current_size.unchecked_sub(new_size);
+        chunk.get_mut_unchecked(self.base_address).size = ChunkSize::new_allocated(new_size);
+
+        let end_of_address_space = Pointer::from_pointer(self.base_address).unchecked_add(self.total_space);
+        {
+            let next_chunk = chunk.unchecked_add(current_size);
+            if next_chunk.cast() < end_of_address_space {
+                self.paranoid_check_access(next_chunk);
+                let next_size = unsafe { next_chunk.get_unchecked(self.base_address).size };
+                if !next_size.is_allocated() {
+                    let next_size = next_size.size();
+                    self.unregister_free_space(next_chunk.cast::<FreeChunkHeader>(), Self::size_to_bin_round_down(next_size));
+                    free_space = free_space.unchecked_add(next_size);
+                }
+            }
+        }
+
+        let next_chunk = chunk.unchecked_add(new_size);
+        self.register_free_space(next_chunk.cast::<FreeChunkHeader>(), new_size, free_space);
+
+        let final_chunk = next_chunk.unchecked_add(free_space);
+        if final_chunk.cast() < end_of_address_space {
+            self.paranoid_check_access(final_chunk);
+            final_chunk.get_mut_unchecked(self.base_address).prev_chunk_size = free_space;
+        }
+
+        self.paranoid_check_chunk(chunk);
+        self.paranoid_check_chunk(next_chunk);
+        self.paranoid_check_chunk(final_chunk);
+    }
+
+    /// Tries to grow the memory allocation to at least the given size.
+    ///
+    /// # Safety
+    ///
+    /// The `pointer` must have come from [`Allocator::alloc`](Allocator::alloc), and must not have been passed to [`Allocator::free`](Allocator::free) beforehand.
+    pub unsafe fn grow_inplace(&mut self, pointer: *mut u8, new_size: Size) -> Option<Size> {
+        if pointer.is_null() {
+            return None;
+        }
+
+        let Some(new_size) = new_size.checked_add(HEADER_SIZE) else {
+            return None;
+        };
+
+        let chunk = Pointer::from_pointer(pointer).unchecked_sub(HEADER_SIZE).cast::<ChunkHeader>();
+        self.paranoid_check_chunk(chunk);
+
+        let current_size = unsafe { chunk.get_unchecked(self.base_address).size };
+        paranoid_assert!(current_size.is_allocated());
+
+        let current_size = current_size.size();
+        if current_size >= new_size {
+            return Some(current_size.unchecked_sub(HEADER_SIZE));
+        }
+
+        let end_of_address_space = Pointer::from_pointer(self.base_address).unchecked_add(self.total_space);
+        let old_next_chunk = chunk.unchecked_add(current_size);
+        if old_next_chunk.cast() >= end_of_address_space {
+            return None;
+        }
+
+        self.paranoid_check_chunk(old_next_chunk);
+        let old_next_size = unsafe { old_next_chunk.get_unchecked(self.base_address).size };
+        if old_next_size.is_allocated() {
+            return None;
+        }
+
+        let old_next_size = old_next_size.size();
+        let available_space = current_size.unchecked_add(old_next_size);
+        if available_space < new_size {
+            return None;
+        }
+
+        let remaining_free_space = available_space.unchecked_sub(new_size);
+        let new_next_chunk = chunk.unchecked_add(new_size);
+
+        let mut end_offset = Size::from_pointer_and_base_unchecked(new_next_chunk, Pointer::from_pointer_mut(self.base_address));
+        if !remaining_free_space.is_empty() {
+            end_offset = end_offset.unchecked_add(FREE_CHUNK_HEADER_SIZE);
+        }
+
+        if self.allocated_space < end_offset {
+            if !unsafe { self.env.expand_memory_until(self.base_address, end_offset) } {
+                return None;
+            }
+
+            self.allocated_space = end_offset;
+        }
+
+        self.unregister_free_space(
+            old_next_chunk.cast::<FreeChunkHeader>(),
+            Self::size_to_bin_round_down(old_next_size),
+        );
+        chunk.get_mut_unchecked(self.base_address).size = ChunkSize::new_allocated(new_size);
+
+        let chunk_size = self.register_free_space(new_next_chunk.cast::<FreeChunkHeader>(), new_size, remaining_free_space);
+        let final_chunk = new_next_chunk.unchecked_add(remaining_free_space);
+        if final_chunk.cast() < end_of_address_space {
+            self.paranoid_check_access(final_chunk);
+            final_chunk.get_mut_unchecked(self.base_address).prev_chunk_size = chunk_size;
+        }
+
+        self.paranoid_check_chunk(chunk);
+        self.paranoid_check_chunk(new_next_chunk);
+        self.paranoid_check_chunk(final_chunk);
+        Some(new_size.unchecked_sub(HEADER_SIZE))
+    }
+
+    /// Reallocates the memory pointed by `pointer`.
+    ///
+    /// # Safety
+    ///
+    /// The `pointer` must have come from [`Allocator::alloc`](Allocator::alloc), and must not have been passed to [`Allocator::free`](Allocator::free) beforehand.
+    pub unsafe fn realloc(&mut self, pointer: *mut u8, align: Size, new_size: Size) -> Option<*mut u8> {
+        let current_size = Self::usable_size_impl(pointer);
+        if new_size == current_size {
+            return Some(pointer);
+        }
+
+        if new_size.is_empty() {
+            self.free(pointer);
+            return None;
+        }
+
+        if cfg!(feature = "realloc_inplace") {
+            if new_size < current_size {
+                self.shrink_inplace(pointer, new_size);
+                return Some(pointer);
+            }
+
+            if self.grow_inplace(pointer, new_size).is_some() {
+                return Some(pointer);
+            }
+        }
+
+        let new_pointer = self.alloc(align, new_size)?;
+        core::ptr::copy_nonoverlapping(pointer, new_pointer, current_size.bytes() as usize);
+        self.free(pointer);
+
+        Some(new_pointer)
+    }
+
     /// Frees the memory pointed by `pointer`.
     ///
     /// # Safety
     ///
     /// The `pointer` must have come from [`Allocator::alloc`](Allocator::alloc), and must not have been passed to [`Allocator::free`](Allocator::free) beforehand.
-    #[inline]
     pub unsafe fn free(&mut self, pointer: *mut u8) {
         if pointer.is_null() {
             return;
@@ -1027,7 +1197,12 @@ impl<E: Env> Allocator<E> {
     /// The `pointer` must have come from [`Allocator::alloc`](Allocator::alloc), and must not have been passed to [`Allocator::free`](Allocator::free) beforehand.
     #[inline]
     pub unsafe fn usable_size(pointer: *mut u8) -> usize {
-        Self::header_for_pointer(pointer).size.size().unchecked_sub(HEADER_SIZE).bytes() as usize
+        Self::usable_size_impl(pointer).bytes() as usize
+    }
+
+    #[inline]
+    unsafe fn usable_size_impl(pointer: *mut u8) -> Size {
+        Self::header_for_pointer(pointer).size.size().unchecked_sub(HEADER_SIZE)
     }
 
     #[inline]
@@ -1059,6 +1234,18 @@ unsafe impl<E: crate::Env> core::alloc::GlobalAlloc for crate::Mutex<Allocator<E
         };
 
         self.lock().alloc_zeroed(align, size).unwrap_or(core::ptr::null_mut())
+    }
+
+    unsafe fn realloc(&self, pointer: *mut u8, layout: core::alloc::Layout, new_size: usize) -> *mut u8 {
+        let Some(align) = Size::from_bytes_usize(layout.align()) else {
+            return core::ptr::null_mut();
+        };
+
+        let Some(new_size) = Size::from_bytes_usize(new_size) else {
+            return core::ptr::null_mut();
+        };
+
+        self.lock().realloc(pointer, align, new_size).unwrap_or(core::ptr::null_mut())
     }
 
     unsafe fn dealloc(&self, pointer: *mut u8, _layout: core::alloc::Layout) {

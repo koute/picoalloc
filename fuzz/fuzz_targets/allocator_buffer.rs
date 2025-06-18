@@ -8,6 +8,8 @@ use std::collections::BTreeSet;
 enum Op {
     Alloc { align: u16, size: u16 },
     Free { index: usize },
+    Shrink { index: usize, size: u16 },
+    Grow { index: usize, size: u16 },
 }
 
 use picoalloc::{Allocator, Env, Size};
@@ -104,6 +106,56 @@ fuzz_target!(|ops: Vec<Op>| {
                     // Make sure the data wasn't corrupted.
                     assert!(slice == expected_data);
                     unsafe { allocator.free(pointer) };
+                }
+            }
+            Op::Shrink { index, size } => {
+                let size = size as usize + 1;
+                let size = Size::from_bytes_usize(size).unwrap();
+
+                if allocations.is_empty() {
+                    continue;
+                }
+
+                let index = index % allocations.len();
+                {
+                    let &(pointer, ref expected_data) = &allocations[index];
+                    let slice = unsafe { core::slice::from_raw_parts(pointer, expected_data.len()) };
+                    assert!(slice == expected_data);
+                }
+                allocations[index].1.truncate(size.bytes().try_into().unwrap());
+                unsafe { allocator.shrink_inplace(allocations[index].0, size) }
+
+                let &(pointer, ref expected_data) = &allocations[index];
+                let slice = unsafe { core::slice::from_raw_parts(pointer, expected_data.len()) };
+                assert!(slice == expected_data);
+            }
+            Op::Grow { index, size } => {
+                let size = size as usize + 1;
+                let size = Size::from_bytes_usize(size).unwrap();
+
+                if allocations.is_empty() {
+                    continue;
+                }
+
+                let index = index % allocations.len();
+                if let Some(new_size) = unsafe { allocator.grow_inplace(allocations[index].0, size) } {
+                    let old_size = allocations[index].1.len();
+                    let new_size = new_size.bytes().try_into().unwrap();
+                    if old_size == new_size {
+                        continue;
+                    }
+                    allocations[index].1.resize(new_size, 0);
+                    {
+                        let &mut (pointer, ref mut expected_data) = &mut allocations[index];
+                        let slice_actual = unsafe { core::slice::from_raw_parts_mut(pointer.add(old_size), new_size - old_size) };
+                        let slice_expected = &mut expected_data[old_size..new_size];
+                        fill_slice((pointer.addr() ^ 0b10101010) as u128, slice_expected);
+                        slice_actual.copy_from_slice(slice_expected);
+                    }
+
+                    let &(pointer, ref expected_data) = &allocations[index];
+                    let slice = unsafe { core::slice::from_raw_parts(pointer, expected_data.len()) };
+                    assert!(slice == expected_data);
                 }
             }
         }

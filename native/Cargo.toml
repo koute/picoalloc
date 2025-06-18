@@ -10,8 +10,10 @@ path = "src/lib.rs"
 crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
-picoalloc = { path = "..", features = ["global_allocator_libc"] }
+picoalloc = { path = "..", features = ["global_allocator_libc"], default-features = false }
 
 [features]
+default = ["realloc_inplace"]
 paranoid = ["picoalloc/paranoid"]
 corevm = ["picoalloc/corevm"]
+realloc_inplace = ["picoalloc/realloc_inplace"]
