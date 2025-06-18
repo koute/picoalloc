@@ -3,7 +3,7 @@
 use crate::Env;
 use core::ptr::NonNull;
 
-#[cfg(any(debug_assertions, test, feature = "paranoid"))]
+#[cfg(any(test, feature = "paranoid"))]
 macro_rules! paranoid_assert {
     ($e:expr) => {
         if !$e {
@@ -12,7 +12,7 @@ macro_rules! paranoid_assert {
     };
 }
 
-#[cfg(any(debug_assertions, test, feature = "paranoid"))]
+#[cfg(any(test, feature = "paranoid"))]
 macro_rules! paranoid_assert_eq {
     ($lhs:expr, $rhs:expr) => {
         if $lhs != $rhs {
@@ -21,12 +21,12 @@ macro_rules! paranoid_assert_eq {
     };
 }
 
-#[cfg(not(any(debug_assertions, test, feature = "paranoid")))]
+#[cfg(not(any(test, feature = "paranoid")))]
 macro_rules! paranoid_assert {
     ($e:expr) => {};
 }
 
-#[cfg(not(any(debug_assertions, test, feature = "paranoid")))]
+#[cfg(not(any(test, feature = "paranoid")))]
 macro_rules! paranoid_assert_eq {
     ($lhs:expr, $rhs:expr) => {};
 }
@@ -879,7 +879,7 @@ impl<E: Env> Allocator<E> {
         Some(unsafe { NonNull::new_unchecked(output) })
     }
 
-    #[cfg(any(debug_assertions, test, feature = "paranoid"))]
+    #[cfg(any(test, feature = "paranoid"))]
     #[inline(never)]
     #[track_caller]
     fn paranoid_check_access<T>(&self, pointer: Pointer<T>) {
@@ -893,11 +893,11 @@ impl<E: Env> Allocator<E> {
         );
     }
 
-    #[cfg(not(any(debug_assertions, test, feature = "paranoid")))]
+    #[cfg(not(any(test, feature = "paranoid")))]
     #[inline(always)]
     fn paranoid_check_access<T>(&self, _pointer: Pointer<T>) {}
 
-    #[cfg(any(debug_assertions, test, feature = "paranoid"))]
+    #[cfg(any(test, feature = "paranoid"))]
     #[inline(never)]
     #[track_caller]
     fn paranoid_check_chunk(&self, chunk: Pointer<ChunkHeader>) {
@@ -947,7 +947,7 @@ impl<E: Env> Allocator<E> {
         }
     }
 
-    #[cfg(not(any(debug_assertions, test, feature = "paranoid")))]
+    #[cfg(not(any(test, feature = "paranoid")))]
     fn paranoid_check_chunk(&self, _chunk: Pointer<ChunkHeader>) {}
 
     /// Shrinks the memory allocation to at most the given size.
