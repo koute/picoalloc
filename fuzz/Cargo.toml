@@ -18,8 +18,8 @@ oorandom = "11.1.5"
 picoalloc = { path = "..", features = ["paranoid"] }
 
 [[bin]]
-name = "allocator"
-path = "fuzz_targets/allocator.rs"
+name = "allocator_system"
+path = "fuzz_targets/allocator_system.rs"
 test = false
 doc = false
 bench = false

@@ -7,4 +7,4 @@ cd ../..
 cd fuzz
 
 echo ">> cargo fuzz run"
-cargo fuzz run allocator -- -runs=20000
+cargo fuzz run allocator_system -- -runs=20000
