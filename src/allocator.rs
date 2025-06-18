@@ -668,6 +668,7 @@ impl<E: Env> Allocator<E> {
         paranoid_assert_eq!(self.first_in_free_list[bin.index()], chunk);
 
         unsafe {
+            paranoid_assert!(!chunk.get_unchecked(self.base_address).size.is_allocated());
             paranoid_assert!(chunk.get_unchecked(self.base_address).prev_in_list.is_null());
             let next_in_list = chunk.get_unchecked(self.base_address).next_in_list;
             paranoid_assert!(next_in_list != chunk);
@@ -689,6 +690,7 @@ impl<E: Env> Allocator<E> {
             self.unregister_free_space_first_chunk(chunk, bin);
         } else {
             let chunk_ref = unsafe { chunk.get_unchecked(self.base_address) };
+            paranoid_assert!(!chunk_ref.size.is_allocated());
             let next_in_list = chunk_ref.next_in_list;
             let prev_in_list = chunk_ref.prev_in_list;
             paranoid_assert!(next_in_list != chunk);
@@ -919,6 +921,7 @@ impl<E: Env> Allocator<E> {
             );
 
             self.paranoid_check_access(chunk);
+            let is_allocated = chunk.get_unchecked(self.base_address).size.is_allocated();
 
             let prev_chunk_size = chunk.get_unchecked(self.base_address).prev_chunk_size;
             if prev_chunk_size.is_empty() {
@@ -927,12 +930,18 @@ impl<E: Env> Allocator<E> {
                 let prev_chunk = chunk.unchecked_sub(prev_chunk_size);
                 paranoid_assert!(prev_chunk.cast() >= base_address);
                 paranoid_assert_eq!(prev_chunk.get_unchecked(self.base_address).size.size(), prev_chunk_size);
+                if !is_allocated {
+                    paranoid_assert!(prev_chunk.get_unchecked(self.base_address).size.is_allocated());
+                }
             }
 
             let size = chunk.get_unchecked(self.base_address).size.size();
             let next_chunk = chunk.unchecked_add(size);
             if next_chunk.cast() < end_of_address_space {
                 paranoid_assert_eq!(next_chunk.get_unchecked(self.base_address).prev_chunk_size, size);
+                if !is_allocated {
+                    paranoid_assert!(next_chunk.get_unchecked(self.base_address).size.is_allocated());
+                }
             } else {
                 paranoid_assert_eq!(next_chunk.cast(), end_of_address_space);
             }
