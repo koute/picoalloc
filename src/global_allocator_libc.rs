@@ -44,12 +44,22 @@ pub extern "C" fn calloc(count: usize, size: usize) -> *mut c_void {
         return core::ptr::null_mut();
     };
 
-    let pointer = malloc(total_size);
-    if !pointer.is_null() {
-        unsafe { core::ptr::write_bytes(pointer.cast::<u8>(), 0, total_size) };
-    }
+    let Some(total_size) = Size::from_bytes_usize(total_size) else {
+        set_errno(ENOMEM);
+        return core::ptr::null_mut();
+    };
 
-    pointer
+    let pointer = {
+        let mut allocator = GLOBAL_ALLOCATOR.lock();
+        allocator.alloc_zeroed(const { Size::from_bytes_usize(16).unwrap() }, total_size)
+    };
+
+    if let Some(pointer) = pointer {
+        pointer.cast()
+    } else {
+        set_errno(ENOMEM);
+        core::ptr::null_mut()
+    }
 }
 
 #[no_mangle]
