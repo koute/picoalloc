@@ -9,11 +9,11 @@ mod mutex;
 mod global_allocator_libc;
 
 #[cfg(any(feature = "global_allocator_rust", feature = "global_allocator_libc"))]
+pub(crate) type SystemAllocator = Allocator<crate::env::System<{ 1024 * 1024 * 1024 }>>;
+
+#[cfg(any(feature = "global_allocator_rust", feature = "global_allocator_libc"))]
 #[cfg_attr(feature = "global_allocator_rust", global_allocator)]
-pub(crate) static GLOBAL_ALLOCATOR: Mutex<Allocator<crate::env::System>> = Mutex::new(Allocator::new(
-    crate::env::System,
-    Size::from_bytes_usize(1024 * 1024 * 1024).unwrap(),
-));
+pub(crate) static GLOBAL_ALLOCATOR: Mutex<SystemAllocator> = Mutex::new(SystemAllocator::new(crate::env::System));
 
 pub use crate::allocator::{Allocator, Size};
 pub use crate::env::{Array, ArrayPointer, Env};
@@ -27,7 +27,7 @@ pub use crate::env::System as UnsafeSystem;
 
 #[cfg(test)]
 fn test_allocator<E: Env>(env: E) {
-    let mut allocator = Allocator::new(env, Size::from_bytes_usize(8 * 1024 * 1024).unwrap());
+    let mut allocator = Allocator::new(env);
     let a0 = allocator
         .alloc(Size::from_bytes_usize(1).unwrap(), Size::from_bytes_usize(1).unwrap())
         .unwrap();
@@ -81,7 +81,7 @@ fn test_allocator<E: Env>(env: E) {
 #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 #[test]
 fn test_allocator_system() {
-    test_allocator(crate::env::System);
+    test_allocator(crate::env::System::<4096>);
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn test_allocator_buffer() {
 #[cfg(test)]
 fn test_many_small_allocations<E: Env>(env: E, count: usize) {
     extern crate alloc;
-    let mut allocator = Allocator::new(env, Size::from_bytes_usize(32 * 1024 * 1024).unwrap());
+    let mut allocator = Allocator::new(env);
     let mut allocations = alloc::vec::Vec::new();
     for nth in 0..count {
         let Some(pointer) = allocator.alloc(Size::from_bytes_usize(1).unwrap(), Size::from_bytes_usize(1).unwrap()) else {
@@ -122,7 +122,7 @@ fn test_many_small_allocations<E: Env>(env: E, count: usize) {
 #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 #[test]
 fn test_many_small_allocations_native() {
-    test_many_small_allocations(crate::env::System, 524288);
+    test_many_small_allocations(crate::env::System::<{ 32 * 1024 * 1024 }>, 524288);
 }
 
 #[test]
@@ -137,7 +137,7 @@ fn test_many_small_allocations_buffer() {
         sentinel: [0b10101010; 64],
     };
 
-    test_many_small_allocations(unsafe { ArrayPointer::new(&mut storage.buffer) }, 255);
+    test_many_small_allocations(unsafe { ArrayPointer::new(&mut storage.buffer) }, 256);
     unsafe {
         for offset in 0..storage.sentinel.len() {
             // Make sure there were no out-of-bounds writes.
@@ -161,7 +161,11 @@ fn test_boundary() {
     }
 
     impl<const SIZE: usize, const LIMIT: usize> Env for TestEnv<SIZE, LIMIT> {
-        unsafe fn allocate_address_space(&mut self, _size: Size) -> *mut u8 {
+        fn total_space(&self) -> Size {
+            const { Size::from_bytes_usize(LIMIT).unwrap() }
+        }
+
+        unsafe fn allocate_address_space(&mut self) -> *mut u8 {
             self.buffer.as_mut_ptr()
         }
 
@@ -169,7 +173,7 @@ fn test_boundary() {
             size <= const { Size::from_bytes_usize(LIMIT).unwrap() }
         }
 
-        unsafe fn free_address_space(&mut self, _base: *mut u8, _size: Size) {}
+        unsafe fn free_address_space(&mut self, _base: *mut u8) {}
     }
 
     impl<const SIZE: usize, const LIMIT: usize> Default for TestEnv<SIZE, LIMIT> {
@@ -181,7 +185,7 @@ fn test_boundary() {
     }
 
     let env = TestEnv::<256, 64>::default();
-    let mut alloc = Allocator::new(env, Size::from_bytes_usize(64).unwrap());
+    let mut alloc = Allocator::new(env);
     let p = alloc
         .alloc(Size::from_bytes_usize(1).unwrap(), Size::from_bytes_usize(32).unwrap())
         .unwrap();
@@ -199,7 +203,7 @@ fn test_shrink() {
     let two = Size::from_bytes_usize(64).unwrap();
 
     let mut buffer = Array([0_u8; 128]);
-    let mut alloc = Allocator::new(unsafe { ArrayPointer::new(&mut buffer) }, Size::from_bytes_usize(128).unwrap());
+    let mut alloc = Allocator::new(unsafe { ArrayPointer::new(&mut buffer) });
 
     let a = alloc.alloc(one, two).unwrap();
     assert!(alloc.alloc(one, one).is_none());
@@ -228,7 +232,7 @@ fn test_grow() {
     let two = Size::from_bytes_usize(64).unwrap();
 
     let mut buffer = Array([0_u8; 128]);
-    let mut alloc = Allocator::new(unsafe { ArrayPointer::new(&mut buffer) }, Size::from_bytes_usize(128).unwrap());
+    let mut alloc = Allocator::new(unsafe { ArrayPointer::new(&mut buffer) });
 
     let a = alloc.alloc(one, one).unwrap();
     let b = alloc.alloc(one, one).unwrap();

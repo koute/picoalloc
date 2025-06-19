@@ -22,9 +22,10 @@ pub fn abort() -> ! {
 }
 
 pub trait Env {
-    unsafe fn allocate_address_space(&mut self, size: Size) -> *mut u8;
+    fn total_space(&self) -> Size;
+    unsafe fn allocate_address_space(&mut self) -> *mut u8;
     unsafe fn expand_memory_until(&mut self, base: *mut u8, size: Size) -> bool;
-    unsafe fn free_address_space(&mut self, base: *mut u8, size: Size);
+    unsafe fn free_address_space(&mut self, base: *mut u8);
 }
 
 #[repr(align(32))]
@@ -40,7 +41,11 @@ impl<const SIZE: usize> ArrayPointer<SIZE> {
 }
 
 impl<const SIZE: usize> Env for ArrayPointer<SIZE> {
-    unsafe fn allocate_address_space(&mut self, _size: Size) -> *mut u8 {
+    fn total_space(&self) -> Size {
+        const { Size::from_bytes_usize(SIZE).unwrap() }
+    }
+
+    unsafe fn allocate_address_space(&mut self) -> *mut u8 {
         self.0.cast()
     }
 
@@ -48,10 +53,10 @@ impl<const SIZE: usize> Env for ArrayPointer<SIZE> {
         size <= const { Size::from_bytes_usize(SIZE).unwrap() }
     }
 
-    unsafe fn free_address_space(&mut self, _base: *mut u8, _size: Size) {}
+    unsafe fn free_address_space(&mut self, _base: *mut u8) {}
 }
 
-pub struct System;
+pub struct System<const SIZE: usize>;
 
 #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 mod linux;

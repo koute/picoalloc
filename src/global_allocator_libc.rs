@@ -1,4 +1,4 @@
-use crate::allocator::{Allocator, Size};
+use crate::allocator::Size;
 use crate::GLOBAL_ALLOCATOR;
 
 use core::ffi::{c_int, c_void};
@@ -157,5 +157,5 @@ pub unsafe extern "C" fn malloc_usable_size(pointer: *mut c_void) -> usize {
     let Some(pointer) = NonNull::new(pointer) else {
         return 0;
     };
-    Allocator::<crate::env::System>::usable_size(pointer.cast())
+    crate::SystemAllocator::usable_size(pointer.cast())
 }

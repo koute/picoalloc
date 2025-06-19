@@ -44,9 +44,14 @@ unsafe fn syscall6(nr: usize, a0: usize, a1: usize, a2: usize, a3: usize, a4: us
     r0
 }
 
-impl Env for System {
+impl<const SIZE: usize> Env for System<SIZE> {
     #[inline]
-    unsafe fn allocate_address_space(&mut self, size: Size) -> *mut u8 {
+    fn total_space(&self) -> Size {
+        const { Size::from_bytes_usize(SIZE).unwrap() }
+    }
+
+    #[inline]
+    unsafe fn allocate_address_space(&mut self) -> *mut u8 {
         const SYS_MMAP: usize = 9;
         const PROT_READ: usize = 1;
         const PROT_WRITE: usize = 2;
@@ -56,7 +61,7 @@ impl Env for System {
             let pointer = abort_on_fail(syscall6(
                 SYS_MMAP,
                 0,
-                size.bytes() as usize,
+                self.total_space().bytes() as usize,
                 PROT_READ | PROT_WRITE,
                 MAP_ANONYMOUS | MAP_PRIVATE,
                 usize::MAX,
@@ -73,10 +78,10 @@ impl Env for System {
     }
 
     #[inline]
-    unsafe fn free_address_space(&mut self, base: *mut u8, size: Size) {
+    unsafe fn free_address_space(&mut self, base: *mut u8) {
         const SYS_MUNMAP: usize = 11;
         unsafe {
-            abort_on_fail(syscall2(SYS_MUNMAP, base.expose_provenance(), size.bytes() as usize));
+            abort_on_fail(syscall2(SYS_MUNMAP, base.expose_provenance(), self.total_space().bytes() as usize));
         }
     }
 }

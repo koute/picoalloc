@@ -562,7 +562,6 @@ const _: () = {
 };
 
 pub struct Allocator<E: Env> {
-    total_space: Size,
     allocated_space: Size,
     base_address: *mut u8,
     free_lists_with_unallocated_memory: BitMask,
@@ -576,15 +575,14 @@ unsafe impl<E: Env> Send for Allocator<E> where E: Send {}
 impl<E: Env> Drop for Allocator<E> {
     fn drop(&mut self) {
         unsafe {
-            self.env.free_address_space(self.base_address, self.total_space);
+            self.env.free_address_space(self.base_address);
         }
     }
 }
 
 impl<E: Env> Allocator<E> {
-    pub const fn new(env: E, total_space: Size) -> Self {
+    pub const fn new(env: E) -> Self {
         Allocator {
-            total_space,
             allocated_space: const { Size::from_bytes_usize(0).unwrap() },
             base_address: core::ptr::null_mut(),
             free_lists_with_unallocated_memory: BitMask::new(),
@@ -605,7 +603,7 @@ impl<E: Env> Allocator<E> {
     #[inline(never)]
     #[cold]
     fn initialize_impl(&mut self) -> bool {
-        let base_address = unsafe { self.env.allocate_address_space(self.total_space) };
+        let base_address = unsafe { self.env.allocate_address_space() };
         if base_address.is_null() {
             return false;
         }
@@ -618,7 +616,7 @@ impl<E: Env> Allocator<E> {
         let is_ok = unsafe { self.env.expand_memory_until(base_address, FREE_CHUNK_HEADER_SIZE) };
         if !is_ok {
             unsafe {
-                self.env.free_address_space(base_address, self.total_space);
+                self.env.free_address_space(base_address);
             }
 
             return false;
@@ -628,12 +626,13 @@ impl<E: Env> Allocator<E> {
         self.allocated_space = FREE_CHUNK_HEADER_SIZE;
         self.paranoid_check_access(Pointer::from_pointer(chunk));
 
-        let bin = Self::size_to_bin_round_down(self.total_space);
+        let total_space = self.env.total_space();
+        let bin = Self::size_to_bin_round_down(total_space);
         self.free_lists_with_unallocated_memory.set(bin);
 
         let chunk_header = FreeChunkHeader {
             prev_chunk_size: Size(0),
-            size: ChunkSize::new_unallocated(self.total_space),
+            size: ChunkSize::new_unallocated(total_space),
             next_in_list: Pointer::NULL,
             prev_in_list: Pointer::NULL,
         };
@@ -850,7 +849,7 @@ impl<E: Env> Allocator<E> {
             prev_chunk_size = self.register_free_space(next_chunk, prev_chunk_size, free_space_rhs);
             let final_chunk = next_chunk.unchecked_add(free_space_rhs);
 
-            if final_chunk.cast() < Pointer::from_pointer(self.base_address).unchecked_add(self.total_space) {
+            if final_chunk.cast() < Pointer::from_pointer(self.base_address).unchecked_add(self.env.total_space()) {
                 self.paranoid_check_access(final_chunk);
                 final_chunk.get_mut_unchecked(self.base_address).prev_chunk_size = prev_chunk_size;
             }
@@ -903,13 +902,12 @@ impl<E: Env> Allocator<E> {
     fn paranoid_check_chunk(&self, chunk: Pointer<ChunkHeader>) {
         paranoid_assert!(!chunk.is_null());
         paranoid_assert!(!self.base_address.is_null());
-        paranoid_assert!(!self.total_space.is_empty());
 
         unsafe {
             let base_address = Pointer::from_pointer(self.base_address);
             paranoid_assert!(chunk.cast() >= base_address);
 
-            let end_of_address_space = base_address.unchecked_add(self.total_space);
+            let end_of_address_space = base_address.unchecked_add(self.env.total_space());
             if chunk.cast() == end_of_address_space {
                 return;
             }
@@ -978,7 +976,7 @@ impl<E: Env> Allocator<E> {
         let mut free_space = current_size.unchecked_sub(new_size);
         chunk.get_mut_unchecked(self.base_address).size = ChunkSize::new_allocated(new_size);
 
-        let end_of_address_space = Pointer::from_pointer(self.base_address).unchecked_add(self.total_space);
+        let end_of_address_space = Pointer::from_pointer(self.base_address).unchecked_add(self.env.total_space());
         {
             let next_chunk = chunk.unchecked_add(current_size);
             if next_chunk.cast() < end_of_address_space {
@@ -1026,7 +1024,7 @@ impl<E: Env> Allocator<E> {
             return Some(current_size.unchecked_sub(HEADER_SIZE));
         }
 
-        let end_of_address_space = Pointer::from_pointer(self.base_address).unchecked_add(self.total_space);
+        let end_of_address_space = Pointer::from_pointer(self.base_address).unchecked_add(self.env.total_space());
         let old_next_chunk = chunk.unchecked_add(current_size);
         if old_next_chunk.cast() >= end_of_address_space {
             return None;
@@ -1150,7 +1148,7 @@ impl<E: Env> Allocator<E> {
         }
 
         // Try to merge with the next free chunk.
-        let end_of_address_space = Pointer::from_pointer(self.base_address).unchecked_add(self.total_space);
+        let end_of_address_space = Pointer::from_pointer(self.base_address).unchecked_add(self.env.total_space());
         {
             let next_chunk = chunk.unchecked_add(size);
             if next_chunk.cast() < end_of_address_space {

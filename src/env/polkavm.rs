@@ -15,9 +15,14 @@ fn sbrk(size: usize) -> *mut u8 {
     }
 }
 
-impl Env for System {
+impl<const SIZE: usize> Env for System<SIZE> {
     #[inline]
-    unsafe fn allocate_address_space(&mut self, _size: Size) -> *mut u8 {
+    fn total_space(&self) -> Size {
+        const { Size::from_bytes_usize(SIZE).unwrap() }
+    }
+
+    #[inline]
+    unsafe fn allocate_address_space(&mut self) -> *mut u8 {
         unsafe {
             let mut pointer: *mut u8;
             core::arch::asm!(
@@ -45,5 +50,5 @@ impl Env for System {
     }
 
     #[inline]
-    unsafe fn free_address_space(&mut self, _base: *mut u8, _size: Size) {}
+    unsafe fn free_address_space(&mut self, _base: *mut u8) {}
 }

@@ -42,7 +42,12 @@ impl<const SIZE: usize, const LIMIT: usize> Drop for TestEnv<SIZE, LIMIT> {
 }
 
 impl<const SIZE: usize, const LIMIT: usize> Env for TestEnv<SIZE, LIMIT> {
-    unsafe fn allocate_address_space(&mut self, _size: Size) -> *mut u8 {
+    #[inline]
+    fn total_space(&self) -> Size {
+        const { Size::from_bytes_usize(SIZE * 16).unwrap() }
+    }
+
+    unsafe fn allocate_address_space(&mut self) -> *mut u8 {
         self.buffer.as_mut_ptr()
     }
 
@@ -50,7 +55,7 @@ impl<const SIZE: usize, const LIMIT: usize> Env for TestEnv<SIZE, LIMIT> {
         size <= const { Size::from_bytes_usize(LIMIT).unwrap() }
     }
 
-    unsafe fn free_address_space(&mut self, _base: *mut u8, _size: Size) {}
+    unsafe fn free_address_space(&mut self, _base: *mut u8) {}
 }
 
 impl<const SIZE: usize, const LIMIT: usize> Default for TestEnv<SIZE, LIMIT> {
@@ -66,7 +71,7 @@ type DefaultEnv = TestEnv<16384, 2048>;
 
 fuzz_target!(|ops: Vec<Op>| {
     let env = DefaultEnv::default();
-    let mut allocator = Allocator::new(env, Size::from_bytes_usize(1024 * 1024).unwrap());
+    let mut allocator = Allocator::new(env);
     let mut allocations: Vec<(NonNull<u8>, Vec<u8>)> = vec![];
     let mut alive_addresses = BTreeSet::new();
 

@@ -28,7 +28,8 @@ fn fill_slice(seed: u128, slice: &mut [u8]) {
 }
 
 fuzz_target!(|ops: Vec<Op>| {
-    let mut allocator = Allocator::new(UnsafeSystem, Size::from_bytes_usize(32 * 1024 * 1024).unwrap());
+    type SystemAllocator = Allocator<UnsafeSystem::<{32 * 1024 * 1024}>>;
+    let mut allocator = SystemAllocator::new(UnsafeSystem);
     let mut allocations: Vec<(NonNull<u8>, Vec<u8>)> = vec![];
     let mut alive_addresses = BTreeSet::new();
 
@@ -43,7 +44,7 @@ fuzz_target!(|ops: Vec<Op>| {
 
                 assert_eq!(pointer.as_ptr().addr() % align, 0);
 
-                let usable_size = unsafe { Allocator::<UnsafeSystem>::usable_size(pointer) };
+                let usable_size = unsafe { SystemAllocator::usable_size(pointer) };
                 assert!(usable_size >= size);
 
                 let data = {
