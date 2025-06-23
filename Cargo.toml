@@ -38,4 +38,4 @@ corevm = ["dep:polkavm-derive"]
 realloc_inplace = []
 
 [dependencies]
-polkavm-derive = { version = "0.24.0", optional = true }
+polkavm-derive = { version = "0.25.0", optional = true }
