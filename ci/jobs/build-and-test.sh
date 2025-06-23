@@ -24,3 +24,6 @@ RUSTC_BOOTSTRAP=1 cargo check --target=ci/riscv64emac-unknown-none-polkavm.json 
 
 echo ">> cargo check (CoreVM)"
 RUSTC_BOOTSTRAP=1 cargo check --target=ci/riscv64emac-unknown-none-polkavm.json -Z build-std=core --features corevm
+
+echo ">> cargo check (riscv32i-unknown-none-elf)"
+cargo check --target=riscv32i-unknown-none-elf

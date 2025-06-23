@@ -20,6 +20,8 @@ jobs:
       run: cargo install --version 33.0.0 wasmtime-cli
     - name: Install target wasm32-wasip2
       run: rustup target add wasm32-wasip2
+    - name: Install target riscv32i-unknown-none-elf
+      run: rustup target add riscv32i-unknown-none-elf
     - name: Build and test
       run: ./ci/jobs/build-and-test.sh
     - name: Build and test (WASM)

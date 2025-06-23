@@ -3,6 +3,8 @@
 
 mod allocator;
 mod env;
+
+#[cfg(target_has_atomic = "8")]
 mod mutex;
 
 #[cfg(feature = "global_allocator_libc")]
@@ -17,6 +19,8 @@ pub(crate) static GLOBAL_ALLOCATOR: Mutex<SystemAllocator> = Mutex::new(SystemAl
 
 pub use crate::allocator::{Allocator, Size};
 pub use crate::env::{Array, ArrayPointer, Env};
+
+#[cfg(target_has_atomic = "8")]
 pub use crate::mutex::Mutex;
 
 #[doc(hidden)]

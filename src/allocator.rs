@@ -1198,6 +1198,7 @@ impl<E: Env> Allocator<E> {
     }
 }
 
+#[cfg(target_has_atomic = "8")]
 unsafe impl<E: crate::Env> core::alloc::GlobalAlloc for crate::Mutex<Allocator<E>> {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
         let Some(align) = Size::from_bytes_usize(layout.align()) else {
