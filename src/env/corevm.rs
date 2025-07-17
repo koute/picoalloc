@@ -3,7 +3,9 @@ use crate::{Env, Size};
 
 #[polkavm_derive::polkavm_import]
 extern "C" {
+    #[polkavm_import(symbol = "corevm_alloc_ext")]
     pub fn alloc(size: u64) -> u64;
+    #[polkavm_import(symbol = "corevm_free_ext")]
     pub fn free(address: u64, size: u64);
 }
 
