@@ -1105,7 +1105,11 @@ impl<E: Env> Allocator<E> {
         }
 
         let new_pointer = self.alloc(align, new_size)?;
-        core::ptr::copy_nonoverlapping(pointer.as_ptr(), new_pointer.as_ptr(), current_size.bytes() as usize);
+        core::ptr::copy_nonoverlapping(
+            pointer.as_ptr(),
+            new_pointer.as_ptr(),
+            core::cmp::min(current_size, new_size).bytes() as usize,
+        );
         self.free(pointer);
 
         Some(new_pointer)
