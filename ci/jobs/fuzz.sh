@@ -13,4 +13,10 @@ echo ">> cargo fuzz run (allocator_buffer)"
 cargo fuzz run allocator_buffer -- -runs=20000
 
 echo ">> cargo fuzz run (allocator_buffer, no realloc_inplace)"
+cargo fuzz run --no-default-features --features paranoid allocator_buffer -- -runs=20000
+
+echo ">> cargo fuzz run (allocator_buffer, no paranoid)"
+cargo fuzz run --no-default-features --features realloc_inplace allocator_buffer -- -runs=20000
+
+echo ">> cargo fuzz run (allocator_buffer, no realloc_inplace, no paranoid)"
 cargo fuzz run --no-default-features allocator_buffer -- -runs=20000
