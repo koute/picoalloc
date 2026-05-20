@@ -11,6 +11,7 @@ enum Op {
     Free { index: usize },
     Shrink { index: usize, size: u16 },
     Grow { index: usize, size: u16 },
+    Realloc { index: usize, align: u16, size: u16 },
 }
 
 use picoalloc::{Allocator, Env, Size};
@@ -134,6 +135,54 @@ fuzz_target!(|ops: Vec<Op>| {
                 let &(pointer, ref expected_data) = &allocations[index];
                 let slice = unsafe { core::slice::from_raw_parts(pointer.as_ptr(), expected_data.len()) };
                 assert!(slice == expected_data);
+            }
+            Op::Realloc { index, align, size } => {
+                if allocations.is_empty() {
+                    continue;
+                }
+                let align = core::cmp::max(1, (align as usize).next_power_of_two());
+                let size = core::cmp::max(1, size as usize);
+                let index = index % allocations.len();
+
+                let (old_pointer, old_data) = {
+                    let &(pointer, ref expected_data) = &allocations[index];
+                    let slice = unsafe { core::slice::from_raw_parts(pointer.as_ptr(), expected_data.len()) };
+                    assert!(slice == expected_data);
+                    (pointer, expected_data.clone())
+                };
+
+                let Some(new_pointer) = (unsafe {
+                    allocator.realloc(old_pointer, Size::from_bytes_usize(align).unwrap(), Size::from_bytes_usize(size).unwrap())
+                }) else {
+                    continue;
+                };
+
+                assert_eq!(new_pointer.as_ptr().addr() % align, 0);
+
+                if new_pointer != old_pointer {
+                    assert!(alive_addresses.remove(&old_pointer));
+                    assert!(alive_addresses.insert(new_pointer));
+                }
+
+                let usable = unsafe { Allocator::<DefaultEnv>::usable_size(new_pointer) };
+                assert!(usable >= size);
+
+                let preserved = core::cmp::min(old_data.len(), usable);
+                let slice = unsafe { core::slice::from_raw_parts(new_pointer.as_ptr(), preserved) };
+                assert!(slice == &old_data[..preserved]);
+
+                let mut new_data = vec![0u8; usable];
+                new_data[..preserved].copy_from_slice(&old_data[..preserved]);
+                if usable > preserved {
+                    let seed = (new_pointer.as_ptr().addr() ^ 0b11001100) as u128;
+                    fill_slice(seed, &mut new_data[preserved..]);
+                    let tail = unsafe {
+                        core::slice::from_raw_parts_mut(new_pointer.as_ptr().add(preserved), usable - preserved)
+                    };
+                    tail.copy_from_slice(&new_data[preserved..]);
+                }
+
+                allocations[index] = (new_pointer, new_data);
             }
             Op::Grow { index, size } => {
                 let size = size as usize + 1;
