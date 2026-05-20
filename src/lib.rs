@@ -231,6 +231,45 @@ fn test_shrink() {
 }
 
 #[test]
+fn test_realloc() {
+    let one = Size::from_bytes_usize(1).unwrap();
+    let big = Size::from_bytes_usize(128).unwrap();
+    let small = Size::from_bytes_usize(32).unwrap();
+
+    let mut buffer = Array([0_u8; 512]);
+    let mut alloc = Allocator::new(unsafe { ArrayPointer::new(&mut buffer) });
+
+    let a = alloc.alloc(one, big).unwrap();
+    unsafe {
+        for i in 0..128 {
+            *a.as_ptr().add(i) = i as u8;
+        }
+    }
+
+    let a = unsafe { alloc.realloc(a, one, small) }.unwrap();
+    unsafe {
+        for i in 0..32 {
+            assert_eq!(*a.as_ptr().add(i), i as u8);
+        }
+        alloc.free(a);
+    }
+
+    let b = alloc.alloc(one, small).unwrap();
+    unsafe {
+        for i in 0..32 {
+            *b.as_ptr().add(i) = i as u8;
+        }
+    }
+    let b = unsafe { alloc.realloc(b, one, big) }.unwrap();
+    unsafe {
+        for i in 0..32 {
+            assert_eq!(*b.as_ptr().add(i), i as u8);
+        }
+        alloc.free(b);
+    }
+}
+
+#[test]
 fn test_grow() {
     let one = Size::from_bytes_usize(32).unwrap();
     let two = Size::from_bytes_usize(64).unwrap();
