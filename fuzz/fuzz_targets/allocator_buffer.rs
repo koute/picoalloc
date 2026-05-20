@@ -11,7 +11,7 @@ enum Op {
     Free { index: usize },
     Shrink { index: usize, size: u16 },
     Grow { index: usize, size: u16 },
-    Realloc { index: usize, align: u16, size: u16 },
+    Realloc { index: usize, size: u16 },
 }
 
 use picoalloc::{Allocator, Env, Size};
@@ -136,11 +136,10 @@ fuzz_target!(|ops: Vec<Op>| {
                 let slice = unsafe { core::slice::from_raw_parts(pointer.as_ptr(), expected_data.len()) };
                 assert!(slice == expected_data);
             }
-            Op::Realloc { index, align, size } => {
+            Op::Realloc { index, size } => {
                 if allocations.is_empty() {
                     continue;
                 }
-                let align = core::cmp::max(1, (align as usize).next_power_of_two());
                 let size = core::cmp::max(1, size as usize);
                 let index = index % allocations.len();
 
@@ -152,12 +151,10 @@ fuzz_target!(|ops: Vec<Op>| {
                 };
 
                 let Some(new_pointer) = (unsafe {
-                    allocator.realloc(old_pointer, Size::from_bytes_usize(align).unwrap(), Size::from_bytes_usize(size).unwrap())
+                    allocator.realloc(old_pointer, Size::from_bytes_usize(1).unwrap(), Size::from_bytes_usize(size).unwrap())
                 }) else {
                     continue;
                 };
-
-                assert_eq!(new_pointer.as_ptr().addr() % align, 0);
 
                 if new_pointer != old_pointer {
                     assert!(alive_addresses.remove(&old_pointer));
