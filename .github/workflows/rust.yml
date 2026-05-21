@@ -17,7 +17,7 @@ jobs:
     - name: uname -a
       run: uname -a
     - name: Install wasmtime-cli
-      run: cargo install --version 33.0.0 wasmtime-cli
+      run: ./ci/util/install-wasmtime-cli.sh
     - name: Install target wasm32-wasip2
       run: rustup target add wasm32-wasip2
     - name: Install target riscv32i-unknown-none-elf
