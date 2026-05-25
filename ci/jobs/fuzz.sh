@@ -11,3 +11,6 @@ cargo fuzz run allocator_system -- -runs=20000
 
 echo ">> cargo fuzz run (allocator_buffer)"
 cargo fuzz run allocator_buffer -- -runs=20000
+
+echo ">> cargo fuzz run (allocator_buffer, no realloc_inplace)"
+cargo fuzz run --no-default-features allocator_buffer -- -runs=20000
