@@ -12,14 +12,15 @@ edition = "2021"
 cargo-fuzz = true
 
 [features]
-default = ["realloc_inplace"]
+default = ["realloc_inplace", "paranoid"]
 realloc_inplace = ["picoalloc/realloc_inplace"]
+paranoid = ["picoalloc/paranoid"]
 
 [dependencies]
 arbitrary = { version = "1", features = ["derive"] }
 libfuzzer-sys = "0.4"
 oorandom = "11.1.5"
-picoalloc = { path = "..", default-features = false, features = ["paranoid"] }
+picoalloc = { path = "..", default-features = false }
 
 [[bin]]
 name = "allocator_system"
